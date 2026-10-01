@@ -8,7 +8,7 @@ import { useNow } from '@/lib/hooks';
 import { parseDateInput, toDateInput } from '@/lib/input';
 import { fmt } from '@/logic/bolus';
 import { buildReportHtml, dayLabel, rangeStats } from '@/logic/report';
-import { startOfDay } from '@/logic/stats';
+import { getDayOffset, startOfDay } from '@/logic/stats';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
 
@@ -44,7 +44,7 @@ export default function Report() {
       const t = parseDateInput(toText);
       if (f === undefined || t === undefined) return { error: 'Başlangıç ve bitiş tarihini yaz (sadece rakamlar yeterli, noktalar kendiliğinden gelir).' };
       if (t < f) return { error: 'Bitiş tarihi başlangıçtan önce olamaz.' };
-      return { from: f, to: t + DAY };
+      return { from: f + getDayOffset() * 60000, to: t + DAY + getDayOffset() * 60000 };
     }
     const days = preset === 'today' ? 1 : Number(preset);
     return { from: today - (days - 1) * DAY, to: today + DAY };

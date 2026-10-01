@@ -70,10 +70,36 @@ export function bgLevel(bg: number, block: TimeBlock | undefined, hypoThreshold:
   return 'ok';
 }
 
+/**
+ * "Gün" gece yarısında değil, sabah öğününün başladığı saatte (varsayılan 06:00) başlar.
+ * Böylece gece 03:00'te girilen ölçüm, o gecenin ait olduğu önceki günde görünür.
+ */
+let dayOffsetMin = 0;
+export const setDayOffset = (min: number) => {
+  dayOffsetMin = Number.isFinite(min) ? min : 0;
+};
+export const getDayOffset = () => dayOffsetMin;
+
 export function startOfDay(t: number): number {
-  const d = new Date(t);
+  const d = new Date(t - dayOffsetMin * 60000);
   d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  return d.getTime() + dayOffsetMin * 60000;
+}
+
+/** Saat dakikası aralığını (0–1440, gece yarısından) günün başlangıcına göre kaydırılmış eksene çevirir (en çok iki parça) */
+export function toDayAxis(s: number, e: number): [number, number][] {
+  const off = dayOffsetMin;
+  const out: [number, number][] = [];
+  const push = (a: number, b: number) => {
+    if (b <= a) return;
+    const st = (a - off + 1440) % 1440;
+    out.push([st, st + (b - a)]);
+  };
+  if (s < off && e > off) {
+    push(s, off);
+    push(off, e);
+  } else push(s, e);
+  return out;
 }
 
 export function entriesBetween(entries: LogEntry[], from: number, to: number) {

@@ -202,14 +202,13 @@ export type LowPlan = {
 };
 
 /** Aktif insülin ve aktif karbonhidratın etkisi bittiğinde beklenen şeker */
-export function projectBg(bg: number, block: TimeBlock, iob: number, cob: number): number {
-  return Math.round(bg - iob * block.isf + cob * bgRisePerGram(block));
+export function projectBg(bg: number, block: TimeBlock, iob: number, cob: number, rise = bgRisePerGram(block)): number {
+  return Math.round(bg - iob * block.isf + cob * rise);
 }
 
 /** Şekeri hedefe çıkarmak için gereken karbonhidrat (aktif insülin ve aktif karbonhidrat dahil). */
-export function carbsToTarget(bg: number, block: TimeBlock, iob: number, cob = 0): LowPlan {
-  const rise = bgRisePerGram(block);
-  const eventualBg = projectBg(bg, block, iob, cob);
+export function carbsToTarget(bg: number, block: TimeBlock, iob: number, cob = 0, rise = bgRisePerGram(block)): LowPlan {
+  const eventualBg = projectBg(bg, block, iob, cob, rise);
   const total = Math.max(0, (block.target - eventualBg) / rise);
   const forIob = Math.min(total, Math.max(0, iob * block.icr - cob));
   return {
@@ -221,18 +220,30 @@ export function carbsToTarget(bg: number, block: TimeBlock, iob: number, cob = 0
 
 export type HypoPlan = {
   severe: boolean;
-  /** Şimdi alınması önerilen hızlı karbonhidrat (g) */
+  /** Şimdi alınması önerilen hızlı karbonhidrat (g): şekere ve 1 g'ın etkisine göre */
   carbsNow: number;
-  /** Aktif insülin nedeniyle önerilen toplam (15-15'in üzerinde ise) */
+  /** Aktif insülin nedeniyle önerilen toplam (carbsNow'un üzerinde ise) */
   carbsWithIob: number;
+  /** Bu miktarla yaklaşık beklenen şeker (15-30 dk sonra) */
+  expectedBg: number;
+  /** Hesapta kullanılan: 1 g hızlı karbonhidratın şekeri kaç mg/dL yükselttiği */
+  rise: number;
 };
 
-/** 15-15 kuralı: en az 15 g hızlı KH; aktif insülin fazlaysa hesaplanan miktar da gösterilir. */
-export function hypoPlan(bg: number, block: TimeBlock, iob: number, s: Settings, cob = 0): HypoPlan {
+/** Tek seferde önerilen en az / en çok hızlı karbonhidrat (g); fazlası yüksek şekere (rebound) yol açar */
+export const HYPO_MIN_G = 10;
+export const HYPO_MAX_G = 30;
+
+/**
+ * Hipo tedavisi: şekeri hedefe (bloğun hedefi) çıkaracak miktar, 1 g'ın etkisine (`rise`) göre 5 g'a yuvarlanır.
+ * Ağır hipoda en az 20 g. Aktif insülin fazlaysa toplam ihtiyaç ayrıca gösterilir.
+ */
+export function hypoPlan(bg: number, block: TimeBlock, iob: number, s: Settings, cob = 0, rise = bgRisePerGram(block)): HypoPlan {
   const severe = bg < s.severeHypoThreshold;
-  const base = severe ? 20 : 15;
-  const plan = carbsToTarget(bg, block, iob, cob);
-  return { severe, carbsNow: base, carbsWithIob: Math.max(base, plan.carbs) };
+  const need = Math.max(0, (block.target - bg) / rise);
+  const now = Math.min(HYPO_MAX_G, Math.max(severe ? 20 : HYPO_MIN_G, Math.ceil(need / 5) * 5));
+  const plan = carbsToTarget(bg, block, iob, cob, rise);
+  return { severe, carbsNow: now, carbsWithIob: Math.max(now, plan.carbs), expectedBg: Math.round(bg + now * rise), rise };
 }
 
 export function fmt(n: number, digits = 1): string {

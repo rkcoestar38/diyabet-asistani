@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { DEFAULT_MEAL_STARTS } from '@/logic/meals';
+import { parseHHMM } from '@/logic/schedule';
+import { setDayOffset } from '@/logic/stats';
 import type { Settings, TimeBlock } from '@/logic/types';
 
 import { storage, uid } from './storage';
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   ratioSource: 'doctor',
   mealStarts: DEFAULT_MEAL_STARTS,
+  tabletG: 4,
   countMethod: 'exchange',
 };
 
@@ -130,3 +133,8 @@ export const useSettings = create<State>()(
     },
   ),
 );
+
+// Günün başlangıcı = sabah öğününün başlangıç saati (gece kayıtları önceki güne yazılır). Ayar değişince veya yüklenince güncellenir.
+const syncDayStart = (st: State) => setDayOffset(parseHHMM(st.settings.mealStarts?.sabah ?? DEFAULT_MEAL_STARTS.sabah));
+useSettings.subscribe(syncDayStart);
+syncDayStart(useSettings.getState());

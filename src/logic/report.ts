@@ -1,7 +1,7 @@
 import { fmt } from './bolus';
 import { MEALS, entryMeal } from './meals';
 import { activeBlock, blockEnd, sortBlocks } from './schedule';
-import { computeStats, startOfDay } from './stats';
+import { computeStats, getDayOffset, startOfDay, toDayAxis } from './stats';
 import type { LogEntry, MealType, Settings } from './types';
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -38,6 +38,16 @@ export function entryNotes(e: LogEntry): string {
   if (e.exercise && e.exercise !== 'none') parts.push(exerciseTr[e.exercise]);
   if (e.note) parts.push(e.note);
   return parts.join(' · ');
+}
+
+/** Öğündeki her yemek ayrı satırda, kendi karbonhidratıyla ("Simit 100 g · 45 g KH"). Yapılandırılmış kayıt yoksa metin özeti. */
+export function foodLines(e: LogEntry): string {
+  if (e.items?.length) {
+    return e.items
+      .map((i) => (i.foodId === 'rule-meat' ? `${esc(i.name)} · +${fmt(i.carbs, 0)} g KH` : `${esc(i.name)} ${fmt(i.grams, 0)} g · ${fmt(i.carbs, 1)} g KH`))
+      .join('<br>');
+  }
+  return e.foods ? esc(e.foods) : '';
 }
 
 export type RangeStats = ReturnType<typeof computeStats> & {
@@ -165,12 +175,14 @@ export function chartSvg(entries: LogEntry[], settings: Settings, from: number, 
       blocks.forEach((blk) => {
         const [sh, sm] = blk.start.split(':').map(Number);
         const [eh, em] = blockEnd(settings.blocks, blk).split(':').map(Number);
-        const bs = (sh * 60 + sm) / 1440;
-        let be = (eh * 60 + em) / 1440;
-        if (be <= bs) be = 1;
-        const bx1 = x0 + bs * dw;
-        const bx2 = x0 + be * dw;
-        parts.push(`<rect x="${bx1.toFixed(1)}" y="${y(blk.high).toFixed(1)}" width="${(bx2 - bx1).toFixed(1)}" height="${(y(blk.low) - y(blk.high)).toFixed(1)}" fill="#2e9e6b" opacity="0.14"/>`);
+        const bs = sh * 60 + sm;
+        let be = eh * 60 + em;
+        if (be <= bs) be = 1440;
+        for (const [a, b] of toDayAxis(bs, be)) {
+          const bx1 = x0 + (a / 1440) * dw;
+          const bx2 = x0 + (b / 1440) * dw;
+          parts.push(`<rect x="${bx1.toFixed(1)}" y="${y(blk.high).toFixed(1)}" width="${(bx2 - bx1).toFixed(1)}" height="${(y(blk.low) - y(blk.high)).toFixed(1)}" fill="#2e9e6b" opacity="0.14"/>`);
+        }
       });
       parts.push(`<line x1="${x0.toFixed(1)}" x2="${x0.toFixed(1)}" y1="${pad.t}" y2="${pad.t + ph}" stroke="#b9c9c7"/>`);
       const d = new Date(day);
@@ -181,7 +193,7 @@ export function chartSvg(entries: LogEntry[], settings: Settings, from: number, 
         for (let h = step; h < 24; h += step) {
           const hx = x0 + (h / 24) * dw;
           parts.push(`<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${pad.t}" y2="${pad.t + ph}" stroke="#e2ebea"/>`);
-          parts.push(`<text x="${hx.toFixed(1)}" y="${pad.t + ph + 28}" font-size="8" fill="#7a8d90" text-anchor="middle">${String(h).padStart(2, '0')}:00</text>`);
+          parts.push(`<text x="${hx.toFixed(1)}" y="${pad.t + ph + 28}" font-size="8" fill="#7a8d90" text-anchor="middle">${String(Math.floor((getDayOffset() / 60 + h) % 24)).padStart(2, '0')}:${String(getDayOffset() % 60).padStart(2, '0')}</text>`);
         }
       }
     });
@@ -300,7 +312,7 @@ export function buildReportHtml({ entries, settings, from, to, ratioChanges = []
       const rows = es
         .map((e) => {
           const bgCls = e.bg === undefined ? '' : e.bg < settings.hypoThreshold ? 'lo' : (() => { const b = activeBlock(settings.blocks, new Date(e.bgTime ?? e.time)); return b && e.bg > b.high ? 'hi' : ''; })();
-          const food = e.foods ? esc(e.foods) : '';
+          const food = foodLines(e);
           const mealName = MEALS.find((m) => m.id === entryMeal(e, settings.mealStarts))?.short ?? '';
           const measured = e.bg === undefined ? '' : e.bgTime && e.time - e.bgTime >= 5 * 60000 ? timeLabel(e.bgTime) : '<span class="same">aynı</span>';
           return `<tr><td>${timeLabel(e.time)}</td><td>${esc(mealName)}</td><td class=\"${bgCls}\">${num(e.bg, 0)}</td><td>${measured}</td><td>${num(e.carbs, 0)}</td><td>${food}</td><td>${num(e.bolus)}</td><td>${num(e.basal)}</td><td>${esc(entryNotes(e))}</td></tr>`;

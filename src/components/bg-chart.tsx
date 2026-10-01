@@ -4,24 +4,29 @@ import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-
 
 import { useTheme } from '@/constants/theme';
 import { activeBlock, parseHHMM, sortBlocks } from '@/logic/schedule';
-import { bgLevel } from '@/logic/stats';
+import { bgLevel, getDayOffset, startOfDay, toDayAxis } from '@/logic/stats';
 import type { LogEntry, TimeBlock } from '@/logic/types';
 
 const H = 220;
 const FONT = Platform.select({ web: 'system-ui, sans-serif', default: undefined });
-const PAD = { l: 34, r: 8, t: 10, b: 40 };
+const TR_DAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
-/** Bir günün şeker ölçümleri; hedef aralık bandı saat dilimlerine göre çizilir. Altta insülin ve karbonhidrat işaretleri. */
-export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: LogEntry[]; blocks: TimeBlock[]; dayStart: number; hypo?: number }) {
+/**
+ * Şeker ölçümleri; hedef aralık bandı saat dilimlerine göre çizilir. `days` = 1: tek gün (altta insülin ve karbonhidrat işaretleri),
+ * 7 / 30: hafta ve ay görünümü (altta gün etiketleri). `dayStart` görünümün ilk gününün başlangıcıdır.
+ */
+export function BgChart({ entries, blocks, dayStart, hypo = 70, days = 1 }: { entries: LogEntry[]; blocks: TimeBlock[]; dayStart: number; hypo?: number; days?: number }) {
   const c = useTheme();
   const [w, setW] = useState(0);
   const bgs = entries.filter((e) => e.bg !== undefined).sort((a, b) => (a.bgTime ?? a.time) - (b.bgTime ?? b.time));
   const maxBg = Math.max(250, ...bgs.map((e) => e.bg!)) + 10;
   const minBg = 40;
+  const single = days === 1;
+  const PAD = { l: 34, r: 8, t: 10, b: single ? 40 : 24 };
   const plotW = Math.max(0, w - PAD.l - PAD.r);
   const plotH = H - PAD.t - PAD.b;
-  const x = (t: number) => PAD.l + ((t - dayStart) / 86400000) * plotW;
-  const xm = (min: number) => PAD.l + (min / 1440) * plotW;
+  const x = (t: number) => PAD.l + ((t - dayStart) / (86400000 * days)) * plotW;
+  const xm = (min: number) => PAD.l + (min / (1440 * days)) * plotW;
   const y = (bg: number) => PAD.t + (1 - (Math.min(Math.max(bg, minBg), maxBg) - minBg) / (maxBg - minBg)) * plotH;
 
   const sorted = sortBlocks(blocks);
@@ -32,6 +37,11 @@ export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: Log
     const parts: [number, number][] = next > 1440 ? [[start, 1440], [0, next - 1440]] : [[start, next]];
     return parts.map(([s, e]) => ({ key: `${b.id}-${s}`, s, e, low: b.low, high: b.high }));
   });
+  // Bantlar günün başlangıcına göre kaydırılır ve her gün için tekrarlanır
+  const dayBands = Array.from({ length: days }, (_, d) =>
+    bands.flatMap((b) => toDayAxis(b.s, b.e).map(([s, e], k) => ({ key: `${d}-${b.key}-${k}`, s: d * 1440 + s, e: d * 1440 + e, low: b.low, high: b.high }))),
+  ).flat();
+  const startMin = getDayOffset();
 
   // Çizgiler: hipo sınırı, hedef aralığın sınırları ve 250; etiketler üst üste binmesin diye yakın olanlar atlanır
   const gridValues = (() => {
@@ -45,7 +55,11 @@ export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: Log
     }
     return out;
   })();
-  const path = bgs.map((e, i) => `${i ? 'L' : 'M'}${x(e.bgTime ?? e.time).toFixed(1)},${y(e.bg!).toFixed(1)}`).join(' ');
+  // Çok günlü görünümde her günün çizgisi ayrı çizilir (günler arasında uzun çizgi olmasın)
+  const bgPath = (list: LogEntry[]) => list.map((e, i) => `${i ? 'L' : 'M'}${x(e.bgTime ?? e.time).toFixed(1)},${y(e.bg!).toFixed(1)}`).join(' ');
+  const paths = single
+    ? [bgPath(bgs)]
+    : [...new Set(bgs.map((e) => startOfDay(e.bgTime ?? e.time)))].map((d) => bgPath(bgs.filter((e) => startOfDay(e.bgTime ?? e.time) === d)));
   const baseY = H - PAD.b;
 
   // Birbirine çok yakın işaretleri birleştir (etiketler üst üste binmesin)
@@ -70,7 +84,7 @@ export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: Log
     <View onLayout={(ev) => setW(ev.nativeEvent.layout.width)} style={{ height: H }}>
       {w > 0 ? (
         <Svg width={w} height={H}>
-          {bands.map((b) => (
+          {dayBands.map((b) => (
             <Rect key={b.key} x={xm(b.s)} width={xm(b.e) - xm(b.s)} y={y(b.high)} height={y(b.low) - y(b.high)} fill={c.ok} opacity={0.14} />
           ))}
           {gridValues.map((v) => (
@@ -83,29 +97,44 @@ export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: Log
               ) : null}
             </G>
           ))}
-          {[0, 6, 12, 18, 24].map((h) => (
-            <SvgText key={h} x={xm(h * 60)} y={baseY + 12} fontSize={10} fill={c.muted} textAnchor={h === 0 ? 'start' : h === 24 ? 'end' : 'middle'} fontFamily={FONT}>
-              {String(h).padStart(2, '0')}
-            </SvgText>
-          ))}
-          {path ? <Path d={path} stroke={c.muted} strokeWidth={1.5} fill="none" opacity={0.7} /> : null}
+          {single
+            ? [0, 6, 12, 18, 24].map((h) => (
+                <SvgText key={h} x={xm(h * 60)} y={baseY + 12} fontSize={10} fill={c.muted} textAnchor={h === 0 ? 'start' : h === 24 ? 'end' : 'middle'} fontFamily={FONT}>
+                  {String(Math.floor((startMin / 60 + h) % 24)).padStart(2, '0')}
+                </SvgText>
+              ))
+            : Array.from({ length: days }, (_, d) => {
+                const t = new Date(dayStart + d * 86400000);
+                const show = days <= 7 || d % 5 === 0 || d === days - 1;
+                return (
+                  <G key={d}>
+                    {d > 0 && (days <= 7 || d % 5 === 0) ? <Line x1={xm(d * 1440)} x2={xm(d * 1440)} y1={PAD.t} y2={baseY} stroke={c.border} strokeWidth={1} /> : null}
+                    {show ? (
+                      <SvgText x={xm(d * 1440 + 720)} y={baseY + 14} fontSize={10} fill={c.muted} textAnchor="middle" fontFamily={FONT}>
+                        {days <= 7 ? `${TR_DAYS[t.getDay()]} ${t.getDate()}` : String(t.getDate())}
+                      </SvgText>
+                    ) : null}
+                  </G>
+                );
+              })}
+          {paths.map((p, i) => (p ? <Path key={i} d={p} stroke={c.muted} strokeWidth={1.5} fill="none" opacity={0.7} /> : null))}
           {bgs.map((e) => (
             <Circle
               key={e.id}
               cx={x(e.bgTime ?? e.time)}
               cy={y(e.bg!)}
-              r={5}
+              r={single ? 5 : days <= 7 ? 4 : 3}
               fill={c[bgLevel(e.bg!, activeBlock(blocks, new Date(e.bgTime ?? e.time)), hypo)]}
               stroke={c.card}
               strokeWidth={1.5}
             />
           ))}
-          {boluses.map((m) => (
+          {(single ? boluses : []).map((m) => (
             <SvgText key={`b${m.x}`} x={m.x} y={baseY + 25} fontSize={10} fill={c.info} textAnchor="middle" fontWeight="bold" fontFamily={FONT}>
               {`${Math.round(m.v * 10) / 10}Ü`}
             </SvgText>
           ))}
-          {carbMarks.map((m) => (
+          {(single ? carbMarks : []).map((m) => (
             <SvgText key={`c${m.x}`} x={m.x} y={baseY + 37} fontSize={10} fill={m.hypo ? c.danger : c.warn} textAnchor="middle" fontFamily={FONT}>
               {`${Math.round(m.v)}g`}
             </SvgText>

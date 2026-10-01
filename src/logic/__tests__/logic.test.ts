@@ -11,6 +11,7 @@ import { analyzeIcr, analyzeIsf, averageTdd, basalTestResult, estimateFromTdd, i
 import { computeStats } from '../stats';
 import { activeBlock, blockEnd, blockProblems, inLimit, parseHHMM, scheduleProblems } from '../schedule';
 import { awaitingPost, mealBefore, postOf } from '../postmeal';
+import { assessHypo, chooseRise, followUpSnack, hypoRiseSamples, personalRise, quickCarbOptions } from '../hypo';
 import type { LogEntry, Settings, TimeBlock } from '../types';
 
 const block: TimeBlock = { id: 'b', name: 'Öğle', start: '11:00', icr: 10, isf: 40, target: 110, low: 80, high: 140 };
@@ -33,6 +34,7 @@ const settings: Settings = {
   hyperThreshold: 250,
   onboarded: true,
   ratioSource: 'doctor',
+  tabletG: 4,
   mealStarts: { gece: '00:00', sabah: '06:00', sabahAra: '09:30', ogle: '12:00', ogleAra: '15:00', aksam: '18:30', aksamAra: '21:00' },
   countMethod: 'exchange',
 };
@@ -181,7 +183,7 @@ describe('carbsToTarget / hypoPlan', () => {
     expect(p.carbsForIob).toBe(10);
   });
   it('hypo plan: at least 15 g; 20 g if severe; more with IOB', () => {
-    expect(hypoPlan(65, block, 0, settings)).toEqual({ severe: false, carbsNow: 15, carbsWithIob: 15 });
+    expect(hypoPlan(65, block, 0, settings)).toMatchObject({ severe: false, carbsNow: 15, carbsWithIob: 15 });
     expect(hypoPlan(50, block, 0, settings).carbsNow).toBe(20);
     expect(hypoPlan(65, block, 2, settings).carbsWithIob).toBe(35); // (110-(-15))/4=31.25 → 35
   });
@@ -763,5 +765,174 @@ describe('klinik göstergeler ve gözlemler', () => {
     expect(m.avgRise).toBe(90);
     expect(m.pairs).toBe(3);
     expect(rep.observations(es, settings).some((o) => o.includes('+90'))).toBe(true);
+  });
+});
+
+describe('gün sınırı (gece kayıtları önceki güne ait)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const st = require('../stats') as typeof import('../stats');
+  afterEach(() => st.setDayOffset(0));
+  it('06:00 başlangıçta 2 Ekim 03:00, 1 Ekim gününe yazılır', () => {
+    st.setDayOffset(360);
+    const night = new Date(2026, 9, 2, 3, 0).getTime();
+    const morning = new Date(2026, 9, 2, 7, 0).getTime();
+    expect(st.startOfDay(night)).toBe(new Date(2026, 9, 1, 6, 0).getTime());
+    expect(st.startOfDay(morning)).toBe(new Date(2026, 9, 2, 6, 0).getTime());
+  });
+  it('varsayılan (0) gece yarısıdır', () => {
+    expect(st.startOfDay(new Date(2026, 9, 2, 3, 0).getTime())).toBe(new Date(2026, 9, 2, 0, 0).getTime());
+  });
+  it('bantlar gün başlangıcına göre kaydırılır', () => {
+    st.setDayOffset(360);
+    // 00:00–24:00 tek bant: 06:00'ya kadar kısmı eksenin sonuna gider
+    expect(st.toDayAxis(0, 1440)).toEqual([[1080, 1440], [0, 1080]]);
+    expect(st.toDayAxis(600, 900)).toEqual([[240, 540]]);
+  });
+});
+
+describe('rapor grafiği gün sınırı', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const st = require('../stats') as typeof import('../stats');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rep = require('../report') as typeof import('../report');
+  afterEach(() => st.setDayOffset(0));
+  it('saat etiketleri günün başlangıcından (06:00) sayılır ve gece ölçümü önceki gün grafiğinde yer alır', () => {
+    st.setDayOffset(360);
+    const es: LogEntry[] = [
+      { id: 'a', time: new Date(2026, 9, 1, 12).getTime(), bg: 120 },
+      { id: 'b', time: new Date(2026, 9, 2, 3).getTime(), bg: 95 },
+    ];
+    const svg = rep.chartSvg(es, settings, new Date(2026, 9, 1, 6).getTime(), new Date(2026, 9, 3, 6).getTime());
+    expect(svg).toContain('09:00');
+    expect(svg).toContain('>03:00<'); // eksenin sonu: gece 03:00 hâlâ aynı günün içinde
+    expect((svg.match(/<svg /g) ?? []).length).toBe(1);
+    expect(svg).toContain('>1 Eki Per<');
+    expect(svg).not.toContain('2 Eki');
+  });
+});
+
+describe('hipo tedavisi şekere ve kişisel etkiye göre', () => {
+  const profileH = { dia: 4, peak: 75 };
+  it('miktar şekere göre değişir (5 g adımlarla, 10–30 g arası)', () => {
+    // 1 g = 4 mg/dL, hedef 110
+    expect(hypoPlan(69, block, 0, settings).carbsNow).toBe(15); // 41/4 = 10,25 → 15
+    expect(hypoPlan(100, block, 0, settings).carbsNow).toBe(10); // alt sınır
+    expect(hypoPlan(60, block, 0, settings).carbsNow).toBe(15); // 12,5 → 15
+    expect(hypoPlan(60, block, 0, settings, 0, 2).carbsNow).toBe(25); // 1 g = 2 mg/dL → 25 g
+    expect(hypoPlan(60, block, 0, settings, 0, 1).carbsNow).toBe(30); // üst sınır
+    expect(hypoPlan(50, block, 0, settings).carbsNow).toBe(20); // ağır: en az 20
+  });
+  it('beklenen şekeri ve kullanılan etkiyi döner', () => {
+    const p = hypoPlan(60, block, 0, settings, 0, 3);
+    expect(p.rise).toBe(3);
+    expect(p.expectedBg).toBe(60 + p.carbsNow * 3);
+  });
+  const tH = new Date(2026, 8, 20, 15, 0).getTime();
+  const treat = (i: number, pre: number, post: number): LogEntry[] => [
+    { id: `t${i}`, time: tH + i * 86400000, bg: pre, hypoCarbs: 15 },
+    { id: `c${i}`, time: tH + i * 86400000 + 15 * 60000, bg: post },
+  ];
+  it('tedavi + 15 dk sonraki ölçümden 1 g etkisini öğrenir', () => {
+    const log = [...treat(0, 55, 115), ...treat(1, 60, 108), ...treat(2, 58, 118)]; // +60, +48, +60 → 4, 3,2, 4 mg/dL/g
+    const samples = hypoRiseSamples(log, [block], profileH);
+    expect(samples).toHaveLength(3);
+    expect(personalRise(samples)).toBe(4);
+    expect(chooseRise(undefined, samples, block)).toMatchObject({ source: 'data', rise: 4 });
+    expect(chooseRise(5.5, samples, block)).toMatchObject({ source: 'manual', rise: 5.5 });
+  });
+  it('az örnekte oranlardan hesaplar; araya yemek girenleri saymaz', () => {
+    const two = [...treat(0, 55, 115), ...treat(1, 60, 108)];
+    expect(chooseRise(undefined, hypoRiseSamples(two, [block], profileH), block)).toMatchObject({ source: 'ratios', rise: 4 });
+    const interrupted: LogEntry[] = [
+      { id: 'x', time: tH, bg: 55, hypoCarbs: 15 },
+      { id: 'y', time: tH + 5 * 60000, carbs: 30, bolus: 3 },
+      { id: 'z', time: tH + 15 * 60000, bg: 140 },
+    ];
+    expect(hypoRiseSamples(interrupted, [block], profileH)).toHaveLength(0);
+  });
+  it('porsiyonlar grama göre ölçeklenir', () => {
+    const o = quickCarbOptions(15, 4).map((x) => x.text);
+    expect(o[0]).toContain('4 glukoz tableti');
+    expect(o[1]).toContain('150 ml meyve suyu');
+    expect(quickCarbOptions(25, 4)[0].text).toContain('6 glukoz tableti');
+    expect(quickCarbOptions(10, 5)[0].text).toContain('2 glukoz tableti');
+  });
+});
+
+describe('düşük şeker ekranı: karbonhidrat ne zaman önerilir / önerilmez', () => {
+  // block: KH oranı 10, ISF 40 → 1 g = 4 mg/dL; hedef 110, aralık 80–140; hipo 70, ağır 54, yüksek 250
+  const a = (bg: number | undefined, iob = 0, cob = 0) => assessHypo(bg, block, iob, cob, settings, 4);
+  const noCarbs = ['belowRange', 'ok', 'high', 'veryHigh', 'invalid'];
+  it('ölçüm yoksa belirtiye göre standart 15 g', () => {
+    expect(a(undefined)).toEqual({ status: 'unknown', carbs: 15 });
+  });
+  it('geçersiz değerde tedavi önerilmez', () => {
+    expect(a(5).status).toBe('invalid');
+    expect(a(700).status).toBe('invalid');
+  });
+  it('hipo sınırının altında tedavi önerilir; ağırda en az 20 g', () => {
+    expect(a(65)).toMatchObject({ status: 'low', plan: { carbsNow: 15 } });
+    expect(a(69).status).toBe('low');
+    expect(a(45)).toMatchObject({ status: 'severe' });
+    expect((a(45) as { plan: { carbsNow: number } }).plan.carbsNow).toBeGreaterThanOrEqual(20);
+  });
+  it('şeker hipo sınırının üstündeyse (yüksek dahil) ASLA tedavi önerilmez', () => {
+    for (const bg of [70, 75, 85, 100, 120, 140, 141, 180, 249, 250, 300, 450, 600]) {
+      for (const iob of [0, 1, 3, 6]) {
+        const r = a(bg, iob);
+        expect(['unknown', 'low', 'severe']).not.toContain(r.status);
+        if (bg >= 80) expect(r.status).not.toBe('falling');
+      }
+    }
+  });
+  it('durumlar doğru sınıflanır', () => {
+    expect(a(75).status).toBe('belowRange');
+    expect(a(120).status).toBe('ok');
+    expect(a(180).status).toBe('high');
+    expect(a(250).status).toBe('veryHigh');
+    expect(noCarbs).toContain(a(300, 4).status);
+  });
+  it('yüksek şekerde aktif insülin fazla olsa da karbonhidrat önerilmez, yalnızca izleme uyarısı', () => {
+    const r = a(250, 6);
+    expect(r).toMatchObject({ status: 'veryHigh', watch: true });
+  });
+  it('hedefin altında + aktif insülinle hipoya iniyorsa küçük önleyici miktar', () => {
+    const r = a(75, 1);
+    expect(r.status).toBe('falling');
+    const g = (r as { carbs: number }).carbs;
+    expect(g).toBeGreaterThanOrEqual(5);
+    expect(g).toBeLessThanOrEqual(30);
+  });
+  it('hedef aralıktaki şekerde aktif insülin yüzünden izle, ama karbonhidrat verme', () => {
+    expect(a(90, 1)).toMatchObject({ status: 'ok', watch: true });
+  });
+  it('hipo sonrası: ek karbonhidrat yalnızca gerekirse', () => {
+    const f = (bg: number, iob = 0) => followUpSnack(bg, block, iob, 0, settings, 4).snack;
+    expect(f(72)).toBe(10);
+    expect(f(120)).toBe(0);
+    expect(f(90, 2)).toBeGreaterThan(0);
+    expect(f(90, 2)).toBeLessThanOrEqual(30);
+  });
+});
+
+describe('raporda yemek başına karbonhidrat', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rep = require('../report') as typeof import('../report');
+  it('her yemek kendi gramı ve karbonhidratıyla ayrı satırda yazılır', () => {
+    const e: LogEntry = {
+      id: 'f', time: 1, carbs: 55, bolus: 5,
+      items: [
+        { foodId: 'simit', name: 'Simit', grams: 100, carbs: 45 },
+        { foodId: 'yumurta', name: 'Haşlanmış yumurta', grams: 50, carbs: 0 },
+        { foodId: 'rule-meat', name: 'Et kuralı (100 g üzeri et)', grams: 0, carbs: 10 },
+      ],
+    };
+    expect(rep.foodLines(e)).toBe('Simit 100 g · 45 g KH<br>Haşlanmış yumurta 50 g · 0 g KH<br>Et kuralı (100 g üzeri et) · +10 g KH');
+    expect(rep.foodLines({ id: 'g', time: 1, foods: 'Ayran' })).toBe('Ayran');
+  });
+  it('PDF HTML\'inde görünür', () => {
+    const e: LogEntry = { id: 'f', time: new Date(2026, 9, 1, 12).getTime(), carbs: 45, bolus: 4, items: [{ foodId: 'simit', name: 'Simit', grams: 100, carbs: 45 }] };
+    const html = rep.buildReportHtml({ entries: [e], settings, from: new Date(2026, 9, 1).getTime(), to: new Date(2026, 9, 2).getTime() });
+    expect(html).toContain('Simit 100 g · 45 g KH');
   });
 });

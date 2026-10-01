@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BgChart } from '@/components/bg-chart';
+import { Chip } from '@/components/when';
 import { Btn, Card, Row, Screen, Segmented, T } from '@/components/ui';
 import { Radius, Space, useTheme, type Palette } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
@@ -24,39 +25,95 @@ export default function Log() {
   const entries = useLog((s) => s.entries);
   const settings = useSettings((s) => s.settings);
   const now = useNow(60000);
-  const [day, setDay] = useState(() => startOfDay(now));
+  const [dayRaw, setDay] = useState(() => startOfDay(now));
+  // Sabah saati ayarı değişirse seçili günü yeni sınırlara oturt
+  const day = startOfDay(dayRaw + 12 * 3600000);
   const [period, setPeriod] = useState<'7' | '14' | '30'>('14');
+  // Görünüm: gün veya "ayın kaçıncı haftası" (1–7, 8–14, 15–21, 22–28, 29–sonu)
+  const [view, setView] = useState<'day' | 'week'>('day');
+  const [wk, setWk] = useState(() => {
+    const d = new Date(startOfDay(now));
+    return { y: d.getFullYear(), m: d.getMonth(), i: Math.floor((d.getDate() - 1) / 7) };
+  });
 
   const today = startOfDay(now);
-  const dayEntries = entriesBetween(entries, day, day + DAY);
+  const logicalDay = (y: number, m: number, d: number) => startOfDay(new Date(y, m, d, 12).getTime());
+  const dim = new Date(wk.y, wk.m + 1, 0).getDate();
+  const weekCount = Math.ceil(dim / 7);
+  const weekStartDate = (i: number) => 1 + 7 * i;
+  const weekSpan = (i: number) => Math.min(7, dim - 7 * i);
+  const weekStart = (i: number) => logicalDay(wk.y, wk.m, weekStartDate(i));
+  const weeksShown = Array.from({ length: weekCount }, (_, i) => i).filter((i) => weekStart(i) <= today);
+
+  const span = view === 'day' ? 1 : weekSpan(wk.i);
+  const from = view === 'day' ? day : weekStart(wk.i);
+  const last = from + (span - 1) * DAY;
+  const dayEntries = entriesBetween(entries, from, last + DAY);
   const dayStats = computeStats(dayEntries, settings.blocks, settings.hypoThreshold);
+  const shortDate = (t: number) => new Date(t).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
   const periodDays = Number(period);
   const periodStats = computeStats(entriesBetween(entries, today - (periodDays - 1) * DAY, today + DAY), settings.blocks, settings.hypoThreshold);
 
+  const monthName = new Date(wk.y, wk.m, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+  const curMonth = new Date(today);
+  const isCurMonth = wk.y === curMonth.getFullYear() && wk.m === curMonth.getMonth();
+  const moveMonth = (delta: number) => {
+    const d = new Date(wk.y, wk.m + delta, 1);
+    const cur = d.getFullYear() === curMonth.getFullYear() && d.getMonth() === curMonth.getMonth();
+    setWk({ y: d.getFullYear(), m: d.getMonth(), i: cur ? Math.floor((curMonth.getDate() - 1) / 7) : 0 });
+  };
+
   const label =
-    day === today
-      ? 'Bugün'
-      : day === today - DAY
-        ? 'Dün'
-        : new Date(day).toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
+    view === 'week'
+      ? monthName
+      : day === today
+        ? 'Bugün'
+        : day === today - DAY
+          ? 'Dün'
+          : new Date(day).toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
     <Screen>
       <View style={styles.dayNav}>
-        <Pressable onPress={() => setDay(day - DAY)} hitSlop={12} accessibilityLabel="Önceki gün">
+        <Pressable onPress={() => (view === 'week' ? moveMonth(-1) : setDay(day - DAY))} hitSlop={12} accessibilityLabel="Önceki">
           <Ionicons name="chevron-back" size={28} color={c.primary} />
         </Pressable>
         <T variant="h2" style={{ flex: 1, textAlign: 'center' }}>
           {label}
         </T>
-        <Pressable onPress={() => day < today && setDay(day + DAY)} hitSlop={12} accessibilityLabel="Sonraki gün">
-          <Ionicons name="chevron-forward" size={28} color={day < today ? c.primary : c.border} />
+        <Pressable
+          onPress={() => (view === 'week' ? !isCurMonth && moveMonth(1) : day < today && setDay(day + DAY))}
+          hitSlop={12}
+          accessibilityLabel="Sonraki">
+          <Ionicons name="chevron-forward" size={28} color={(view === 'week' ? !isCurMonth : day < today) ? c.primary : c.border} />
         </Pressable>
       </View>
 
+      <Segmented
+        options={[
+          { value: 'day', label: 'Gün' },
+          { value: 'week', label: 'Hafta' },
+        ]}
+        value={view}
+        onChange={setView}
+      />
+
+      {view === 'week' ? (
+        <View style={{ gap: Space.xs }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm }}>
+            {weeksShown.map((i) => (
+              <Chip key={i} label={`${i + 1}. hafta`} active={i === wk.i} onPress={() => setWk({ ...wk, i })} />
+            ))}
+          </View>
+          <T variant="small">
+            Ayın {weekStartDate(wk.i)}–{weekStartDate(wk.i) + weekSpan(wk.i) - 1}. günleri · {shortDate(from)} – {shortDate(last)}
+          </T>
+        </View>
+      ) : null}
+
       <Card>
-        <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={day} hypo={settings.hypoThreshold} />
-        <StatGrid s={dayStats} />
+        <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={from} days={span} hypo={settings.hypoThreshold} />
+        <StatGrid s={dayStats} perDay={span > 1 ? Math.max(dayStats.days, 1) : undefined} dayCount={span > 1 ? dayStats.days : undefined} />
       </Card>
 
       <Row>
@@ -65,13 +122,27 @@ export default function Log() {
       </Row>
       <Btn variant="secondary" icon="document-text-outline" title="Doktor raporu (PDF)" onPress={() => router.push('/report' as Href)} />
 
-      <Card title="Kayıtlar" icon="list">
-        {dayEntries.length === 0 ? (
-          <T variant="muted">Bu gün için kayıt yok.</T>
-        ) : (
-          [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} hasPost={!!postOf(entries, e)} />)
-        )}
-      </Card>
+      {span === 1 ? (
+        <Card title="Kayıtlar" icon="list">
+          {dayEntries.length === 0 ? (
+            <T variant="muted">Bu gün için kayıt yok.</T>
+          ) : (
+            [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} hasPost={!!postOf(entries, e)} />)
+          )}
+        </Card>
+      ) : (
+        <Card title="Günlere göre" icon="calendar">
+          <DayTable
+            entries={dayEntries}
+            from={from}
+            days={span}
+            onPick={(d) => {
+              setDay(d);
+              setView('day');
+            }}
+          />
+        </Card>
+      )}
 
       <Card title="Genel bakış" icon="stats-chart">
         <Segmented
@@ -90,6 +161,39 @@ export default function Log() {
         </T>
       </Card>
     </Screen>
+  );
+}
+
+/** Hafta/ay görünümünde her günün özeti; satıra dokununca o günün kayıtları açılır */
+function DayTable({ entries, from, days, onPick }: { entries: LogEntry[]; from: number; days: number; onPick: (day: number) => void }) {
+  const c = useTheme();
+  const settings = useSettings((s) => s.settings);
+  const rows = Array.from({ length: days }, (_, i) => from + (days - 1 - i) * DAY)
+    .map((d) => ({ d, s: computeStats(entriesBetween(entries, d, d + DAY), settings.blocks, settings.hypoThreshold) }))
+    .filter((r) => r.s.readings > 0 || r.s.carbs > 0 || r.s.bolus > 0);
+  if (rows.length === 0) return <T variant="muted">Bu aralıkta kayıt yok.</T>;
+  const cell = { fontVariant: ['tabular-nums' as const] };
+  return (
+    <View>
+      <View style={styles.tRow}>
+        <T variant="small" style={{ flex: 1.3 }}>Gün</T>
+        <T variant="small" style={{ flex: 0.8, textAlign: 'right' }}>Ort.</T>
+        <T variant="small" style={{ flex: 1, textAlign: 'right' }}>Aralıkta</T>
+        <T variant="small" style={{ flex: 1.2, textAlign: 'right' }}>En düşük–yüksek</T>
+        <T variant="small" style={{ flex: 0.6, textAlign: 'right' }}>Hipo</T>
+      </View>
+      {rows.map(({ d, s }) => (
+        <Pressable key={d} onPress={() => onPick(d)} style={({ pressed }) => [styles.tRow, { borderTopColor: c.border, borderTopWidth: StyleSheet.hairlineWidth, opacity: pressed ? 0.6 : 1 }]}>
+          <T style={{ flex: 1.3, fontWeight: '600' }}>{new Date(d).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' })}</T>
+          <T style={[{ flex: 0.8, textAlign: 'right' }, cell]}>{s.avg ?? '—'}</T>
+          <T style={[{ flex: 1, textAlign: 'right' }, cell]} color={s.inRange === undefined ? undefined : s.inRange >= 70 ? 'ok' : s.inRange >= 50 ? 'warn' : 'danger'}>
+            {s.inRange !== undefined ? `%${s.inRange}` : '—'}
+          </T>
+          <T style={[{ flex: 1.2, textAlign: 'right' }, cell]}>{s.min !== undefined ? `${s.min}–${s.max}` : '—'}</T>
+          <T style={[{ flex: 0.6, textAlign: 'right' }, cell]} color={s.hypos ? 'danger' : undefined}>{s.hypos || '—'}</T>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -191,6 +295,7 @@ function EntryRow({ e, hasPost }: { e: LogEntry; hasPost: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  tRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 9 },
   dayNav: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   stat: { flexGrow: 1, flexBasis: '22%', minWidth: 75, borderRadius: Radius.md, padding: Space.sm },

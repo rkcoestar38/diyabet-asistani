@@ -53,6 +53,10 @@ export type Settings = {
   countMethod: 'exchange' | 'composition';
   /** Her öğünün başlangıç saati (SS:DD); öğün, kayıt saatine göre otomatik seçilir */
   mealStarts: Record<MealType, string>;
+  /** Hipo hesabı: 1 g hızlı karbonhidratın şekeri kaç mg/dL yükselttiği. Boşsa kayıtlardan, o da yoksa oranlardan hesaplanır. */
+  hypoRise?: number;
+  /** Bir glukoz tabletindeki karbonhidrat (g) */
+  tabletG: number;
 };
 
 export type MealType = 'sabah' | 'sabahAra' | 'ogle' | 'ogleAra' | 'aksam' | 'aksamAra' | 'gece';

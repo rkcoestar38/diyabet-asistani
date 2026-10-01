@@ -17,6 +17,7 @@ import { calcBolus, carbsForDose, carbsToTarget, checkBg, fmt } from '@/logic/bo
 import { carbsOnBoard, insulinOnBoard, recentBolus } from '@/logic/iob';
 import { mealAt, mealLabel } from '@/logic/meals';
 import { awaitingPost } from '@/logic/postmeal';
+import { chooseRise, hypoRiseSamples } from '@/logic/hypo';
 import { icrSample } from '@/logic/ratios';
 import { activeBlock, blockEnd, parseHHMM, scheduleProblems, sortBlocks } from '@/logic/schedule';
 import type { ExerciseLevel, Warning } from '@/logic/types';
@@ -122,7 +123,8 @@ export default function Calculator() {
   const bolus = mode === 'meal' || mode === 'correction' ? calcBolus({ ...base, carbs: mode === 'meal' ? carbs : 0 }) : undefined;
   const reverse = mode === 'reverse' ? carbsForDose({ ...base, units: parseNum(unitText) ?? 0 }) : undefined;
   const bgCheck = checkBg(checkValue, settings);
-  const low = mode === 'low' && bg !== undefined && bgCheck.kind !== 'invalid' ? carbsToTarget(bg, block, iob, cob) : undefined;
+  const rise = chooseRise(settings.hypoRise, hypoRiseSamples(entries, settings.blocks, profile), block).rise;
+  const low = mode === 'low' && bg !== undefined && bgCheck.kind !== 'invalid' ? carbsToTarget(bg, block, iob, cob, rise) : undefined;
 
   const hasInput = bgMeasured !== undefined || carbs > 0 || (mode === 'reverse' && unitText !== '');
   const isHypo = bgCheck.kind === 'hypo';
@@ -499,11 +501,11 @@ export default function Calculator() {
           <View style={styles.resultHead}>
             <T variant="label">Hedefte ({block.target}) kalmak için</T>
             <T variant="big" color={low.carbs > 0 ? 'warn' : 'ok'}>
-              {low.carbs} g
+              {low.carbs > 0 ? `${low.carbs} g` : 'Gerekmiyor'}
             </T>
-            <T variant="small">karbonhidrat ye (bunun için insülin vurma)</T>
+            <T variant="small">{low.carbs > 0 ? 'karbonhidrat ye (bunun için insülin vurma)' : 'Karbonhidrat almana gerek yok'}</T>
           </View>
-          <KV k="1 g karbonhidrat şekeri yükseltir" v={`~${fmt(block.isf / block.icr)} mg/dL`} />
+          <KV k="1 g karbonhidrat şekeri yükseltir" v={`~${fmt(rise)} mg/dL`} />
           <KV k="Aktif insülin ve KH bitince beklenen şeker" v={`~${Math.max(low.eventualBg, 0)} mg/dL`} />
           {low.carbs === 0 ? <Notice level="info" text="Aktif insülinin hesaba katıldığında hedefin altına inmen beklenmiyor." /> : null}
           <Warnings list={bgCheck.warnings} />
