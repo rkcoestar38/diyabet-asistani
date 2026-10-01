@@ -1,0 +1,58 @@
+name: Android APK
+
+# "v1.0.1" gibi bir etiket (tag) gönderilince APK derlenir ve GitHub Release olarak yayınlanır.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Sürümü etiketten ayarla
+        run: |
+          node -e "
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          a.expo.version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+          a.expo.android.versionCode = Number(process.env.GITHUB_RUN_NUMBER);
+          fs.writeFileSync('app.json', JSON.stringify(a, null, 2));
+          console.log('Sürüm', a.expo.version, 'kod', a.expo.android.versionCode);
+          "
+
+      - name: Android projesini oluştur
+        run: npx expo prebuild --platform android --no-install
+
+      - name: APK derle
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Release yayınla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "diyabet-asistani-${GITHUB_REF_NAME}.apk"
+          gh release create "$GITHUB_REF_NAME" "diyabet-asistani-${GITHUB_REF_NAME}.apk" \
+            --title "Diyabet Asistanı ${GITHUB_REF_NAME}" \
+            --generate-notes
