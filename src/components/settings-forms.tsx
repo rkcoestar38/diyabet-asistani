@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Help, type GlossaryKey } from '@/components/guide';
+import { Chip } from '@/components/when';
 import { Btn, Card, Field, Notice, Row, Segmented, T, TimeField, Toggle, confirm, parseNum, useInRow } from '@/components/ui';
 import { parseTimeInput } from '@/lib/input';
 import { Space, useTheme } from '@/constants/theme';
@@ -178,25 +179,47 @@ export function RatioEditor({ source = 'Elle düzenleme' }: { source?: string })
   );
 }
 
-const INSULINS = [
-  { value: 'standard', label: 'NovoRapid / Humalog / Apidra', peak: 75 },
-  { value: 'ultra', label: 'Fiasp / Lyumjev', peak: 55 },
+/** Yaygın hızlı etkili insülinler: seçilince adı ve etki hızı (en yüksek etki zamanı) ayarlanır */
+const RAPID_INSULINS = [
+  { name: 'NovoRapid', peak: 75 },
+  { name: 'Humalog', peak: 75 },
+  { name: 'Apidra', peak: 75 },
+  { name: 'Fiasp', peak: 55 },
+  { name: 'Lyumjev', peak: 55 },
 ] as const;
 
 export function InsulinForm({ advanced = true }: { advanced?: boolean }) {
   const s = useSettings((st) => st.settings);
   const update = useSettings((st) => st.update);
-  const type = s.peak <= 60 ? 'ultra' : 'standard';
+  const type: 'ultra' | 'standard' = s.peak <= 60 ? 'ultra' : 'standard';
   return (
     <Card title="Hızlı etkili insülinim" icon="medkit-outline">
-      <Segmented
-        options={INSULINS.map((i) => ({ value: i.value, label: i.label }))}
-        value={type}
-        onChange={(v) => {
-          const ins = INSULINS.find((i) => i.value === v)!;
-          update({ peak: ins.peak, rapidName: ins.label.split(' / ')[0] });
-        }}
+      <View>
+        <T variant="label">Hangi insülini kullanıyorsun?</T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {RAPID_INSULINS.map((i) => (
+            <Chip key={i.name} label={i.name} active={s.rapidName === i.name} onPress={() => update({ rapidName: i.name, peak: i.peak })} />
+          ))}
+        </View>
+      </View>
+      <Field
+        label="İnsülin adı (listede yoksa yaz)"
+        keyboard="text"
+        placeholder="ör. Humalog KwikPen"
+        value={s.rapidName}
+        onChangeText={(v) => update({ rapidName: v })}
       />
+      <View>
+        <T variant="label">Etki hızı</T>
+        <Segmented
+          options={[
+            { value: 'standard', label: 'Standart (NovoRapid, Humalog, Apidra)' },
+            { value: 'ultra', label: 'Ultra hızlı (Fiasp, Lyumjev)' },
+          ]}
+          value={type}
+          onChange={(v) => update({ peak: v === 'ultra' ? 55 : 75 })}
+        />
+      </View>
       <View>
         <T variant="label">Kalemim kaçar kaçar ayarlanıyor?</T>
         <Segmented

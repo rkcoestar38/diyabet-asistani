@@ -3,7 +3,8 @@ import { Platform, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { useTheme } from '@/constants/theme';
-import { parseHHMM, sortBlocks } from '@/logic/schedule';
+import { activeBlock, parseHHMM, sortBlocks } from '@/logic/schedule';
+import { bgLevel } from '@/logic/stats';
 import type { LogEntry, TimeBlock } from '@/logic/types';
 
 const H = 220;
@@ -11,7 +12,7 @@ const FONT = Platform.select({ web: 'system-ui, sans-serif', default: undefined 
 const PAD = { l: 34, r: 8, t: 10, b: 40 };
 
 /** Bir günün şeker ölçümleri; hedef aralık bandı saat dilimlerine göre çizilir. Altta insülin ve karbonhidrat işaretleri. */
-export function BgChart({ entries, blocks, dayStart }: { entries: LogEntry[]; blocks: TimeBlock[]; dayStart: number }) {
+export function BgChart({ entries, blocks, dayStart, hypo = 70 }: { entries: LogEntry[]; blocks: TimeBlock[]; dayStart: number; hypo?: number }) {
   const c = useTheme();
   const [w, setW] = useState(0);
   const bgs = entries.filter((e) => e.bg !== undefined).sort((a, b) => (a.bgTime ?? a.time) - (b.bgTime ?? b.time));
@@ -32,6 +33,18 @@ export function BgChart({ entries, blocks, dayStart }: { entries: LogEntry[]; bl
     return parts.map(([s, e]) => ({ key: `${b.id}-${s}`, s, e, low: b.low, high: b.high }));
   });
 
+  // Çizgiler: hipo sınırı, hedef aralığın sınırları ve 250; etiketler üst üste binmesin diye yakın olanlar atlanır
+  const gridValues = (() => {
+    const vs = [...new Set([hypo, ...sorted.flatMap((b) => [b.low, b.high]), 250])].sort((a, b) => a - b);
+    const out: { v: number; label: boolean }[] = [];
+    let lastY = Infinity;
+    for (const v of vs) {
+      const label = lastY - y(v) >= 12 || lastY === Infinity;
+      if (label) lastY = y(v);
+      out.push({ v, label });
+    }
+    return out;
+  })();
   const path = bgs.map((e, i) => `${i ? 'L' : 'M'}${x(e.bgTime ?? e.time).toFixed(1)},${y(e.bg!).toFixed(1)}`).join(' ');
   const baseY = H - PAD.b;
 
@@ -60,12 +73,14 @@ export function BgChart({ entries, blocks, dayStart }: { entries: LogEntry[]; bl
           {bands.map((b) => (
             <Rect key={b.key} x={xm(b.s)} width={xm(b.e) - xm(b.s)} y={y(b.high)} height={y(b.low) - y(b.high)} fill={c.ok} opacity={0.14} />
           ))}
-          {[70, 180, 250].map((v) => (
-            <G key={v}>
-              <Line x1={PAD.l} x2={w - PAD.r} y1={y(v)} y2={y(v)} stroke={v === 70 ? c.danger : c.border} strokeDasharray="4 4" strokeWidth={1} />
-              <SvgText x={PAD.l - 4} y={y(v) + 4} fontSize={10} fill={c.muted} textAnchor="end" fontFamily={FONT}>
-                {v}
-              </SvgText>
+          {gridValues.map((v) => (
+            <G key={v.v}>
+              <Line x1={PAD.l} x2={w - PAD.r} y1={y(v.v)} y2={y(v.v)} stroke={v.v === hypo ? c.danger : c.border} strokeDasharray="4 4" strokeWidth={1} />
+              {v.label ? (
+                <SvgText x={PAD.l - 4} y={y(v.v) + 4} fontSize={10} fill={v.v === hypo ? c.danger : c.muted} textAnchor="end" fontFamily={FONT}>
+                  {v.v}
+                </SvgText>
+              ) : null}
             </G>
           ))}
           {[0, 6, 12, 18, 24].map((h) => (
@@ -73,14 +88,16 @@ export function BgChart({ entries, blocks, dayStart }: { entries: LogEntry[]; bl
               {String(h).padStart(2, '0')}
             </SvgText>
           ))}
-          {path ? <Path d={path} stroke={c.primary} strokeWidth={2} fill="none" /> : null}
+          {path ? <Path d={path} stroke={c.muted} strokeWidth={1.5} fill="none" opacity={0.7} /> : null}
           {bgs.map((e) => (
             <Circle
               key={e.id}
               cx={x(e.bgTime ?? e.time)}
               cy={y(e.bg!)}
-              r={4}
-              fill={e.bg! < 70 ? c.danger : e.bg! > 180 ? c.warn : c.primary}
+              r={5}
+              fill={c[bgLevel(e.bg!, activeBlock(blocks, new Date(e.bgTime ?? e.time)), hypo)]}
+              stroke={c.card}
+              strokeWidth={1.5}
             />
           ))}
           {boluses.map((m) => (

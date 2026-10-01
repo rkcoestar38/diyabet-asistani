@@ -6,6 +6,11 @@ export type Stats = {
   avg?: number;
   min?: number;
   max?: number;
+  /** Standart sapma ve değişkenlik katsayısı (%) */
+  sd?: number;
+  cv?: number;
+  /** Ortalamadan tahmini HbA1c (GMI, %) */
+  gmi?: number;
   /** Hedef aralıkta / altında / üstünde olan ölçüm yüzdeleri */
   inRange?: number;
   below?: number;
@@ -37,9 +42,14 @@ export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThres
   const n = bgs.length;
   const pct = (x: number) => (n ? Math.round((x / n) * 100) : undefined);
   const values = bgs.map((e) => e.bg!);
+  const mean = n ? values.reduce((s, v) => s + v, 0) / n : 0;
+  const sd = n > 1 ? Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)) : undefined;
   return {
     readings: n,
-    avg: n ? Math.round(values.reduce((s, v) => s + v, 0) / n) : undefined,
+    sd: sd !== undefined ? Math.round(sd) : undefined,
+    cv: sd !== undefined && mean > 0 ? Math.round((sd / mean) * 100) : undefined,
+    gmi: n ? Math.round((3.31 + 0.02392 * mean) * 10) / 10 : undefined,
+    avg: n ? Math.round(mean) : undefined,
     min: n ? Math.min(...values) : undefined,
     max: n ? Math.max(...values) : undefined,
     inRange: pct(inRange),
@@ -51,6 +61,13 @@ export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThres
     hypos: countEpisodes(entries.filter((e) => e.hypoCarbs || (e.bg !== undefined && e.bg < hypoThreshold)).map((e) => e.time)),
     days: new Set(entries.map((e) => startOfDay(e.time))).size,
   };
+}
+
+/** Bir şekerin durumu: palet anahtarı olarak (danger = hipo, ok = hedef aralığında, warn = aralığın dışında). Uygulamanın her yerinde aynı kural. */
+export function bgLevel(bg: number, block: TimeBlock | undefined, hypoThreshold: number): 'danger' | 'ok' | 'warn' {
+  if (bg < hypoThreshold) return 'danger';
+  if (block && (bg > block.high || bg < block.low)) return 'warn';
+  return 'ok';
 }
 
 export function startOfDay(t: number): number {

@@ -3,12 +3,13 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Chip, MealChips, wrapRow } from '@/components/when';
-import { Btn, Card, DateField, Field, Notice, Row, Screen, Segmented, T, TimeField, confirm, parseNum } from '@/components/ui';
+import { Btn, Card, DateField, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle, confirm, parseNum } from '@/components/ui';
 import { Space } from '@/constants/theme';
-import { useNow } from '@/lib/hooks';
+import { currentTime, useNow } from '@/lib/hooks';
 import { parseDateInput, parseTimeInput, toDateInput, toTimeInput } from '@/lib/input';
 import { BG_MAX, BG_MIN, fmt } from '@/logic/bolus';
-import { mealAt } from '@/logic/meals';
+import { mealAt, mealLabel } from '@/logic/meals';
+import { mealBefore, postOf } from '@/logic/postmeal';
 import type { ExerciseLevel, LogEntry, LogItem, MealType } from '@/logic/types';
 import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
@@ -41,8 +42,11 @@ const BG_OFFSETS = [
 ];
 
 export default function Entry() {
-  const params = useLocalSearchParams<{ id?: string; basal?: string }>();
-  const existing = useLog((s) => s.entries.find((e) => e.id === params.id));
+  const params = useLocalSearchParams<{ id?: string; basal?: string; after?: string }>();
+  const entries = useLog((s) => s.entries);
+  const existing = entries.find((e) => e.id === params.id);
+  const afterSrc = entries.find((e) => e.id === params.after);
+  const existingPost = existing ? postOf(entries, existing) : undefined;
   const { add, update, remove } = useLog();
   const settings = useSettings((s) => s.settings);
   const cart = useFoods((s) => s.cart);
@@ -60,7 +64,12 @@ export default function Entry() {
     setDateText(t === undefined ? undefined : toDateInput(t));
     setTimeText(t === undefined ? undefined : toTimeInput(t));
   };
-  const [meal, setMeal] = useState<MealType | undefined>(existing?.meal);
+  const [meal, setMeal] = useState<MealType | undefined>(existing?.meal ?? afterSrc?.meal);
+  // Tokluk (yemekten sonra) ölçümü mü? Yemek kaydının "Tokluk ekle" düğmesinden açılınca otomatik işaretli
+  const [post, setPost] = useState(existing?.post ?? !!afterSrc);
+  // Yemekle birlikte girilen tokluk şekeri ve yemekten kaç dakika sonra ölçüldüğü
+  const [postBg, setPostBg] = useState(str(existingPost?.bg));
+  const [postDelay, setPostDelay] = useState(existing && existingPost ? Math.round((existingPost.time - existing.time) / 60000) : 120);
   const [bg, setBg] = useState(str(existing?.bg));
   // Boş = yemek/kayıt zamanıyla aynı anda ölçüldü
   const [bgTimeText, setBgTimeText] = useState(existing?.bgTime ? toTimeInput(existing.bgTime) : '');
@@ -107,6 +116,10 @@ export default function Entry() {
   if (values.carbs !== undefined && !(values.carbs >= 0 && values.carbs <= 400)) errors.push('Karbonhidrat geçersiz.');
   if (values.bolus !== undefined && !(values.bolus >= 0 && values.bolus <= 100)) errors.push('Hızlı insülin geçersiz.');
   if (values.basal !== undefined && !(values.basal >= 0 && values.basal <= 200)) errors.push('Bazal geçersiz.');
+  const postValue = post ? undefined : parseNum(postBg);
+  const postTime = ts !== undefined ? ts + postDelay * 60000 : undefined;
+  if (postValue !== undefined && !(postValue >= BG_MIN && postValue <= BG_MAX)) errors.push(`Tokluk şekeri ${BG_MIN}–${BG_MAX} arasında olmalı.`);
+  if (postValue !== undefined && postTime !== undefined && postTime > now + 5 * 60000) errors.push('Tokluk ölçümünün saati henüz gelmedi. Ölçünce Günlük’teki “Tokluk ekle” ile girebilirsin; şimdilik bu alanı boş bırak.');
   const empty = Object.values(values).every((v) => v === undefined) && !note.trim() && exercise === 'none';
 
   const cartCarbs = cartTotal(cart);
@@ -129,7 +142,7 @@ export default function Entry() {
   const itemsTotal = items ? Math.round(items.reduce((s, i) => s + i.carbs, 0)) : 0;
 
   function save() {
-    const savedAt = untouched ? Date.now() : ts!;
+    const savedAt = untouched ? currentTime() : ts!;
     const entry: Omit<LogEntry, 'id'> = {
       time: savedAt,
       bgTime: values.bg !== undefined ? bgTime : undefined,
@@ -140,6 +153,10 @@ export default function Entry() {
       exercise: exercise === 'none' ? undefined : exercise,
       note: note.trim() || undefined,
     };
+    // Tokluk ölçümü kendi başına girildiyse hangi yemeğe ait olduğunu bul
+    const owner = post ? (afterSrc ?? mealBefore(entries, bgTime ?? savedAt, existing?.id)) : undefined;
+    const postFields = post ? { post: true, afterId: owner?.id } : { post: undefined, afterId: undefined };
+    let mainId = existing?.id;
     if (existing) {
       // Elle düzenlemede doz bileşenleri artık geçerli olmayabilir
       const changedDose = entry.bolus !== existing.bolus || entry.carbs !== existing.carbs || entry.bg !== existing.bg;
@@ -148,9 +165,19 @@ export default function Entry() {
         bgTime: undefined, items: undefined, foods: undefined, exercise: undefined, note: undefined,
         ...(changedDose ? { mealBolus: undefined, correctionBolus: undefined } : {}),
         ...entry,
+        ...postFields,
       });
     } else {
-      add(entry);
+      mainId = add({ ...entry, ...(post ? postFields : {}) }).id;
+    }
+    if (!post && mainId) {
+      if (postValue !== undefined && postTime !== undefined) {
+        const fields = { time: postTime, bg: postValue, meal: mealValue, post: true, afterId: mainId };
+        if (existingPost) update(existingPost.id, { ...fields, bgTime: undefined });
+        else add(fields);
+      } else if (existingPost) {
+        remove(existingPost.id);
+      }
     }
     if (items && cart.length) clearCart();
     router.back();
@@ -182,6 +209,10 @@ export default function Entry() {
           </T>
           <MealChips value={mealValue} auto={meal === undefined} onChange={setMeal} />
         </View>
+        <Toggle label="Tokluk şekeri (yemekten sonra ölçtüm)" value={post} onChange={setPost} />
+        {post && afterSrc ? (
+          <Notice level="info" text={`${mealLabel(afterSrc.meal ?? mealAt(afterSrc.time, settings.mealStarts))} yemeğinin tokluk şekeri olarak kaydedilecek.`} />
+        ) : null}
 
         <Row>
           <Field label="Şeker" suffix="mg/dL" value={bg} onChangeText={setBg} keyboard="number" />
@@ -200,6 +231,22 @@ export default function Entry() {
           </View>
         ) : null}
 
+        {!post ? (
+          <View style={{ gap: 6 }}>
+            <Row>
+              <Field label="Tokluk şekeri (isteğe bağlı)" suffix="mg/dL" value={postBg} onChangeText={setPostBg} keyboard="number" />
+            </Row>
+            {postBg !== '' ? (
+              <View style={wrapRow}>
+                {[60, 120, 180].map((m) => (
+                  <Chip key={m} label={`${m / 60} saat sonra`} active={postDelay === m} onPress={() => setPostDelay(m)} />
+                ))}
+              </View>
+            ) : (
+              <T variant="small">Açlık ve tokluğu birlikte girmek için: açlık şekerini yukarıya, yemekten sonraki ölçümü buraya yaz.</T>
+            )}
+          </View>
+        ) : null}
         <Row>
           <Field label="Karbonhidrat" suffix="g" value={carbs} onChangeText={setCarbs} step={5} />
         </Row>
@@ -217,7 +264,7 @@ export default function Entry() {
         </Row>
 
         <Row>
-          <Field label={`Hızlı insülin (${settings.rapidName})`} suffix="Ü" value={bolus} onChangeText={setBolus} step={0.5} />
+          <Field label={settings.rapidName ? `Hızlı insülin (${settings.rapidName})` : 'Hızlı insülin'} suffix="Ü" value={bolus} onChangeText={setBolus} step={0.5} />
           <Field label={`Bazal${settings.basalName ? ` (${settings.basalName})` : ''}`} suffix="Ü" value={basal} onChangeText={setBasal} step={1} />
         </Row>
         <Row>
@@ -254,6 +301,7 @@ export default function Entry() {
             title="Kaydı sil"
             onPress={() =>
               confirm('Kaydı sil', 'Bu kayıt silinsin mi?', () => {
+                entries.filter((x) => x.afterId === existing.id).forEach((x) => remove(x.id));
                 remove(existing.id);
                 router.back();
               }, 'Sil')

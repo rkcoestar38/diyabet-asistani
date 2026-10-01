@@ -30,7 +30,7 @@ const DAY_PARTS: [string, string][] = [
 
 export const DEFAULT_SETTINGS: Settings = {
   blocks: [block('Tüm gün', '00:00')],
-  rapidName: 'NovoRapid',
+  rapidName: '',
   dia: 4,
   peak: 75,
   penStep: 1,
@@ -116,7 +116,13 @@ export const useSettings = create<State>()(
     {
       name: 'settings',
       storage,
-      version: 1,
+      version: 2,
+      // v2: "NovoRapid" yalnızca eski bir varsayılandı; kullanıcı seçmediyse yanlış insülin adı raporlanmasın
+      migrate: (persisted, version) => {
+        const p = persisted as { settings?: { rapidName?: string } } | undefined;
+        if (version < 2 && p?.settings?.rapidName === 'NovoRapid') p.settings.rapidName = '';
+        return persisted as never;
+      },
       merge: (persisted, current) => {
         const p = persisted as Partial<State> | undefined;
         return { ...current, ...p, settings: { ...DEFAULT_SETTINGS, ...p?.settings, mealStarts: { ...DEFAULT_MEAL_STARTS, ...p?.settings?.mealStarts } } };

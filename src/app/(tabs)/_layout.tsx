@@ -24,12 +24,12 @@ function TabIcon({ name, focused, color }: { name: IconName; focused: boolean; c
   );
 }
 
-const screens: { name: string; title: string; icon: IconName }[] = [
-  { name: 'index', title: 'Hesapla', icon: 'calculator' },
-  { name: 'foods', title: 'Yemekler', icon: 'restaurant' },
-  { name: 'log', title: 'Günlük', icon: 'journal' },
-  { name: 'learn', title: 'Öğren', icon: 'school' },
-  { name: 'settings', title: 'Ayarlar', icon: 'settings' },
+const screens: { name: string; title: string; label: string; icon: IconName }[] = [
+  { name: 'index', title: 'Diyabet Asistanı', label: 'Ana sayfa', icon: 'home' },
+  { name: 'calc', title: 'Doz hesapla', label: 'Doz', icon: 'calculator' },
+  { name: 'log', title: 'Günlük', label: 'Günlük', icon: 'journal' },
+  { name: 'learn', title: 'Öğren', label: 'Öğren', icon: 'school' },
+  { name: 'settings', title: 'Ayarlar', label: 'Ayarlar', icon: 'settings' },
 ];
 
 export default function TabLayout() {
@@ -56,9 +56,11 @@ export default function TabLayout() {
         <Tabs.Screen
           key={s.name}
           name={s.name}
-          options={{ title: s.title, tabBarIcon: ({ color, focused }) => <TabIcon name={s.icon} color={color} focused={focused} /> }}
+          options={{ title: s.title, tabBarLabel: s.label, tabBarIcon: ({ color, focused }) => <TabIcon name={s.icon} color={color} focused={focused} /> }}
         />
       ))}
+      {/* Yemek listesi alt çubukta yer almaz; Ana sayfa ve Doz hesapla ekranlarından açılır */}
+      <Tabs.Screen name="foods" options={{ title: 'Yemek listesi', href: null }} />
     </Tabs>
   );
 }

@@ -98,7 +98,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
             <Btn
               title={picker ? `Hesaplamaya dön (${total} g)` : `Doz hesapla (${total} g)`}
               icon={picker ? 'checkmark' : 'calculator'}
-              onPress={() => (picker ? router.back() : router.navigate('/'))}
+              onPress={() => (picker ? router.back() : router.navigate('/calc'))}
             />
           </>
         )}

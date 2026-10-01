@@ -10,6 +10,7 @@ import { carbsOnBoard, insulinOnBoard, iobFraction, recentBolus } from '../iob';
 import { analyzeIcr, analyzeIsf, averageTdd, basalTestResult, estimateFromTdd, icrSample, isfSample } from '../ratios';
 import { computeStats } from '../stats';
 import { activeBlock, blockEnd, blockProblems, inLimit, parseHHMM, scheduleProblems } from '../schedule';
+import { awaitingPost, mealBefore, postOf } from '../postmeal';
 import type { LogEntry, Settings, TimeBlock } from '../types';
 
 const block: TimeBlock = { id: 'b', name: 'Öğle', start: '11:00', icr: 10, isf: 40, target: 110, low: 80, high: 140 };
@@ -714,5 +715,53 @@ describe('exchange list counting', () => {
     const f = food('Su böreği');
     expect(d.per100(f, 'exchange')).toBe(f.carbsPer100);
     expect(d.per100(food('Lahmacun'), 'composition')).toBe(food('Lahmacun').carbsPer100);
+  });
+});
+
+describe('tokluk (yemek sonrası) şeker', () => {
+  const m = (id: string, time: number, extra: object = {}) => ({ id, time, carbs: 40, bolus: 4, ...extra }) as import('../types').LogEntry;
+  const t0 = 1_700_000_000_000;
+  it('1–4 saat arasındaki, tokluğu girilmemiş yemeği bulur', () => {
+    const log = [m('a', t0)];
+    expect(awaitingPost(log, t0 + 30 * 60000)).toBeUndefined();
+    expect(awaitingPost(log, t0 + 120 * 60000)?.id).toBe('a');
+    expect(awaitingPost(log, t0 + 300 * 60000)).toBeUndefined();
+  });
+  it('tokluk girilince artık sormaz', () => {
+    const log = [m('a', t0), { id: 'p', time: t0 + 7200000, bg: 150, post: true, afterId: 'a' } as import('../types').LogEntry];
+    expect(postOf(log, log[0])?.id).toBe('p');
+    expect(awaitingPost(log, t0 + 8000000)).toBeUndefined();
+  });
+  it('tokluk ölçümünü en yakın önceki yemeğe bağlar', () => {
+    const log = [m('a', t0), m('b', t0 + 3600000)];
+    expect(mealBefore(log, t0 + 3 * 3600000)?.id).toBe('b');
+    expect(mealBefore(log, t0 + 8 * 3600000)).toBeUndefined();
+  });
+});
+
+describe('klinik göstergeler ve gözlemler', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rep = require('../report') as typeof import('../report');
+  const mk = (id: string, time: number, extra: object) => ({ id, time, ...extra }) as LogEntry;
+  it('GMI, SS ve CV hesaplanır', () => {
+    const es = [100, 140, 180, 220].map((bg, i) => mk(String(i), 1_700_000_000_000 + i * 3600000, { bg }));
+    const s = computeStats(es, settings.blocks, 70);
+    expect(s.avg).toBe(160);
+    expect(s.gmi).toBe(7.1);
+    expect(s.sd).toBe(52);
+    expect(s.cv).toBe(32);
+  });
+  it('tokluk−açlık farkını öğün başına bulur ve gözlem üretir', () => {
+    const t = new Date(2026, 8, 1, 12, 30).getTime();
+    const es: LogEntry[] = [];
+    for (let d = 0; d < 3; d++) {
+      const base = t + d * 86400000;
+      es.push(mk(`m${d}`, base, { bg: 100, carbs: 50, bolus: 5, meal: 'ogle' }));
+      es.push(mk(`p${d}`, base + 7200000, { bg: 190, post: true, afterId: `m${d}`, meal: 'ogle' }));
+    }
+    const m = rep.mealStats(es, settings).find((x) => x.meal === 'ogle')!;
+    expect(m.avgRise).toBe(90);
+    expect(m.pairs).toBe(3);
+    expect(rep.observations(es, settings).some((o) => o.includes('+90'))).toBe(true);
   });
 });

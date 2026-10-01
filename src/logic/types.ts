@@ -68,6 +68,9 @@ export type LogEntry = {
   bgTime?: number;
   /** Hangi öğün (verilmezse saatinden çıkarılır) */
   meal?: MealType;
+  /** Yemekten sonraki (tokluk) şeker ölçümü; `afterId` ait olduğu yemek kaydıdır */
+  post?: boolean;
+  afterId?: string;
   /** Seçilen yemekler (yapılandırılmış); foods bunun metin özeti */
   items?: LogItem[];
   carbs?: number;

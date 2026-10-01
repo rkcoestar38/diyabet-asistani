@@ -156,7 +156,6 @@ export default function Onboarding() {
           </WaterLevel>
           <Card title="Şu anki ayarların" icon="checkmark-circle">
             <View style={{ gap: Space.xs }}>
-              <T variant="muted">Şu anki ayarların:</T>
               <T>
                 • Karbonhidrat oranı: <T style={{ fontWeight: '700' }}>1 Ü = {fmt(block.icr)} g</T>
               </T>

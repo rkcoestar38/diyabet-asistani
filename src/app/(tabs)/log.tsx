@@ -8,8 +8,10 @@ import { Btn, Card, Row, Screen, Segmented, T } from '@/components/ui';
 import { Radius, Space, useTheme, type Palette } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { computeStats, entriesBetween, startOfDay, type Stats } from '@/logic/stats';
+import { computeStats, entriesBetween, startOfDay, bgLevel, type Stats } from '@/logic/stats';
+import { activeBlock } from '@/logic/schedule';
 import { MEALS, entryMeal } from '@/logic/meals';
+import { postOf } from '@/logic/postmeal';
 import type { LogEntry } from '@/logic/types';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -53,7 +55,7 @@ export default function Log() {
       </View>
 
       <Card>
-        <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={day} />
+        <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={day} hypo={settings.hypoThreshold} />
         <StatGrid s={dayStats} />
       </Card>
 
@@ -67,7 +69,7 @@ export default function Log() {
         {dayEntries.length === 0 ? (
           <T variant="muted">Bu gün için kayıt yok.</T>
         ) : (
-          [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} />)
+          [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} hasPost={!!postOf(entries, e)} />)
         )}
       </Card>
 
@@ -96,16 +98,26 @@ function StatGrid({ s, perDay, dayCount }: { s: Stats; perDay?: number; dayCount
   if (s.readings === 0 && !s.bolus && !s.carbs && !s.basal) return <T variant="muted">Henüz veri yok.</T>;
   const items: [string, string, (keyof Palette)?][] = [
     ['Ortalama', s.avg !== undefined ? `${s.avg}` : '—'],
-    ['Aralıkta', s.inRange !== undefined ? `%${s.inRange}` : '—', 'ok'],
-    ['Altında', s.below !== undefined ? `%${s.below}` : '—', 'danger'],
-    ['Üstünde', s.above !== undefined ? `%${s.above}` : '—', 'warn'],
     [perDay ? 'KH / gün' : 'Toplam KH', `${perDay ? Math.round(s.carbs / perDay) : s.carbs} g`],
     [perDay ? 'Hızlı / gün' : 'Hızlı insülin', `${fmt(perDay ? s.bolus / perDay : s.bolus)} Ü`],
-    [perDay ? 'Bazal / gün' : 'Bazal', `${fmt(perDay ? s.basal / perDay : s.basal)} Ü`],
+    [perDay ? 'Bazal / gün' : 'Bazal', s.basal ? `${fmt(perDay ? s.basal / perDay : s.basal)} Ü` : '—'],
     ['Hipo', `${s.hypos}`, s.hypos ? 'danger' : undefined],
+    ...(perDay && s.readings >= 5 ? ([['Tahmini HbA1c', s.gmi !== undefined ? `%${s.gmi}` : '—'], ['Değişkenlik (CV)', s.cv !== undefined ? `%${s.cv}` : '—']] as [string, string][]) : []),
   ];
   return (
     <View style={styles.grid}>
+      {s.readings > 0 ? (
+        <View style={{ width: '100%', gap: 4 }}>
+          <View style={{ flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: c.border }}>
+            <View style={{ flex: s.below ?? 0, backgroundColor: c.danger }} />
+            <View style={{ flex: s.inRange ?? 0, backgroundColor: c.ok }} />
+            <View style={{ flex: s.above ?? 0, backgroundColor: c.warn }} />
+          </View>
+          <T variant="small">
+            Hedefin altında %{s.below ?? 0} · Aralıkta %{s.inRange ?? 0} · Üstünde %{s.above ?? 0}
+          </T>
+        </View>
+      ) : null}
       {items.map(([k, v, color]) => (
         <View key={k} style={[styles.stat, { backgroundColor: c.bg }]}>
           <T variant="small">{k}</T>
@@ -121,19 +133,22 @@ function StatGrid({ s, perDay, dayCount }: { s: Stats; perDay?: number; dayCount
   );
 }
 
-function EntryRow({ e }: { e: LogEntry }) {
+function EntryRow({ e, hasPost }: { e: LogEntry; hasPost: boolean }) {
   const c = useTheme();
   const starts = useSettings((s) => s.settings.mealStarts);
   const meal = MEALS.find((m) => m.id === entryMeal(e, starts));
   const parts: string[] = [];
+  if (e.post) parts.push('Tokluk');
   if (e.carbs) parts.push(`${fmt(e.carbs)} g KH`);
   if (e.bolus) parts.push(`${fmt(e.bolus)} Ü hızlı`);
   if (e.basal) parts.push(`${fmt(e.basal)} Ü bazal`);
   if (e.hypoCarbs) parts.push(`Hipo: ${e.hypoCarbs} g`);
   if (e.ketones !== undefined) parts.push(`Keton ${fmt(e.ketones)}`);
   if (e.exercise && e.exercise !== 'none') parts.push(exerciseTr[e.exercise]);
-  const bgColor = e.bg === undefined ? 'muted' : e.bg < 70 ? 'danger' : e.bg > 180 ? 'warn' : 'ok';
-  return (
+  const hypo = useSettings((s) => s.settings.hypoThreshold);
+  const blocks = useSettings((s) => s.settings.blocks);
+  const bgColor = e.bg === undefined ? 'muted' : bgLevel(e.bg, activeBlock(blocks, new Date(e.bgTime ?? e.time)), hypo);
+  const row = (
     <Pressable
       onPress={() => router.push({ pathname: '/entry', params: { id: e.id } })}
       style={({ pressed }) => [styles.entry, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}>
@@ -161,6 +176,17 @@ function EntryRow({ e }: { e: LogEntry }) {
       </View>
       <Ionicons name="chevron-forward" size={18} color={c.muted} />
     </Pressable>
+  );
+  if (!e.carbs || e.post || hasPost) return row;
+  return (
+    <View>
+      {row}
+      <Pressable onPress={() => router.push({ pathname: '/entry', params: { after: e.id } })} hitSlop={6} style={{ paddingVertical: 6, paddingLeft: 62 + Space.sm }}>
+        <T variant="small" color="primary" style={{ fontWeight: '600' }}>
+          + Tokluk şekeri ekle
+        </T>
+      </Pressable>
+    </View>
   );
 }
 

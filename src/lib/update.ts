@@ -53,7 +53,8 @@ export async function fetchLatest(current = currentVersion()): Promise<{ latest:
     version: tag.replace(/^v/i, ''),
     apkUrl: apk?.browser_download_url,
     pageUrl: r.html_url ?? `https://github.com/${UPDATE_REPO}/releases/latest`,
-    notes: (r.body ?? '').trim(),
+    // GitHub'ın otomatik eklediği "Full Changelog" bağlantısı kullanıcıya anlamlı değil
+    notes: (r.body ?? '').split(/\r?\n/).filter((l) => !/full changelog/i.test(l)).join('\n').trim(),
   };
   return { latest, isNewer: compareVersions(latest.version, current) > 0 };
 }
