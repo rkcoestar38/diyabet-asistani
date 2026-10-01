@@ -28,7 +28,7 @@ export function SameAsBefore({ meal, before }: { meal: MealType; before: number 
         Daha önce {mealLabel(meal).toLowerCase()} öğününde yediklerin
       </T>
       {prev.map((e) => {
-        const items = e.items!;
+        const items = e.items!.filter((i) => i.foodId !== 'rule-meat');
         const total = Math.round(items.reduce((s, i) => s + i.carbs, 0));
         const already = cart.length > 0 && items.every((i) => cart.some((c2) => c2.foodId === i.foodId && c2.grams === i.grams));
         return (

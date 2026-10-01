@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { Food } from '@/data/foods-tr';
+import { meatRule, type Food } from '@/data/foods-tr';
+import { useSettings } from './settings';
 
 import { storage, uid } from './storage';
 
-export type CartItem = { id: string; foodId: string; name: string; grams: number; carbs: number; fatty?: boolean };
+export type CartItem = { id: string; foodId: string; name: string; grams: number; carbs: number; fatty?: boolean; meat?: boolean };
 export type SavedMeal = { id: string; name: string; items: CartItem[] };
 
 type State = {
@@ -61,4 +62,8 @@ export const useFoods = create<State>()(
   ),
 );
 
-export const cartTotal = (cart: CartItem[]) => Math.round(cart.reduce((s, c) => s + c.carbs, 0));
+/** Değişim yönteminde öğünde 100 g üzeri et varsa eklenen karbonhidrat (g); yoksa 0 */
+export const cartMeatRule = (cart: CartItem[]) => meatRule(cart, useSettings.getState().settings.countMethod);
+
+/** Sepetin toplam karbonhidratı (yönteme bağlı et kuralı dahil) */
+export const cartTotal = (cart: CartItem[]) => Math.round(cart.reduce((s, c) => s + c.carbs, 0) + cartMeatRule(cart));

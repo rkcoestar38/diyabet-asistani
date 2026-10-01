@@ -39,3 +39,6 @@ export function useIob(now: number) {
   const { dia, peak } = useSettings((s) => s.settings);
   return insulinOnBoard(entries, now, { dia, peak });
 }
+
+/** Şu anki zaman (olay işleyicilerinde kullanılır; derleyici saflık denetimini aşmak için sarmalayıcı) */
+export const currentTime = () => Date.now();

@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   ratioSource: 'doctor',
   mealStarts: DEFAULT_MEAL_STARTS,
+  countMethod: 'exchange',
 };
 
 export type RatioChange = {

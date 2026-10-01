@@ -11,6 +11,8 @@ import { pickText, shareText } from '@/lib/files';
 import { DEFAULT_MEAL_STARTS, MEALS } from '@/logic/meals';
 import { parseHHMM } from '@/logic/schedule';
 import { useFoods } from '@/store/foods';
+import { toast } from '@/store/toast';
+import type { CountMethod as CountMethodValue } from '@/data/foods-tr';
 import { useLog } from '@/store/log';
 import { DEFAULT_SETTINGS, useSettings } from '@/store/settings';
 
@@ -52,6 +54,8 @@ export default function SettingsScreen() {
       <>
         <InsulinForm />
       </>
+
+      <CountMethodSettings />
 
       <MealTimes />
 
@@ -117,6 +121,44 @@ export default function SettingsScreen() {
         text="Tüm veriler yalnızca bu cihazda saklanır; telefon değiştirmeden önce yedek al."
       />
     </Screen>
+  );
+}
+
+/** Yiyecek karbonhidratı nasıl sayılsın: hastane/diyetisyen değişim listesi mi, gerçek bileşim mi */
+function CountMethodSettings() {
+  const method = useSettings((st) => st.settings.countMethod);
+  const update = useSettings((st) => st.update);
+  const clearCart = useFoods((st) => st.clearCart);
+  return (
+    <Collapsible title="Sayım yöntemi" icon="calculator-outline" initiallyOpen>
+      <Segmented<CountMethodValue>
+        options={[
+          { value: 'exchange', label: 'Değişim listesi' },
+          { value: 'composition', label: 'Gerçek bileşim' },
+        ]}
+        value={method}
+        onChange={(v) => {
+          if (v === method) return;
+          update({ countMethod: v });
+          clearCart();
+          toast('Sayım yöntemi değişti; tabaktaki yemekler temizlendi');
+        }}
+      />
+      {method === 'exchange' ? (
+        <>
+          <T variant="muted">
+            Eğitimde kullanılan değişim listesi: 1 ekmek veya meyve değişimi = 15 g karbonhidrat (KHO), 1 bardak süt/yoğurt = 10 g, sebze değişimi = 6 g,
+            et/yumurta/yağ = 0 g. Karbonhidrat oranını (K/İ) doktorun bu yönteme göre belirliyorsa bunu seç.
+          </T>
+          <T variant="small">Öğünde toplam 100 g üzeri et yersen +10 g KHO eklenir. Listede olmayan yiyeceklerde gerçek bileşim değerleri kullanılır.</T>
+        </>
+      ) : (
+        <T variant="muted">
+          Yiyeceğin gerçek karbonhidrat miktarı (TürKomp ve paket etiketleriyle uyumlu). Oranını bu şekilde sayarak belirlediysen bunu seç. Meyve ve
+          ekmekte değişim listesinden %10–40 daha düşük sonuç verir.
+        </T>
+      )}
+    </Collapsible>
   );
 }
 

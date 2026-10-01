@@ -95,36 +95,35 @@ function summary(doseTime: number, bgTime: number, now: number, retro: boolean) 
 export function WhenCard({ now }: { now: number }) {
   const draft = useDraft();
   const w = useWhen(now);
-  const [dateText, setDateText] = useState(toDateInput(w.doseTime));
-  const [timeText, setTimeText] = useState(toTimeInput(w.doseTime));
-  const [bgText, setBgText] = useState(toTimeInput(w.bgTime));
+  // Yalnızca kullanıcı yazarken tamamlanmamış metinleri tutar; geri kalan her şey taslaktan ve canlı saatten türetilir.
+  const [typing, setTyping] = useState<{ date?: string; time?: string; bg?: string }>({});
+
+  const dateShown = typing.date ?? toDateInput(w.doseTime);
+  const timeShown = typing.time ?? toTimeInput(w.doseTime);
+  const bgShown = typing.bg ?? toTimeInput(w.bgTime);
 
   const setDose = (t: number | undefined) => {
     draft.set({ when: t, bgTime: undefined });
-    const base = t ?? now;
-    setDateText(toDateInput(base));
-    setTimeText(toTimeInput(base));
-    setBgText(toTimeInput(base));
+    setTyping({});
   };
 
-  function applyDateTime(d: string, t: string) {
+  function commitDateTime(d: string, t: string) {
     const day = parseDateInput(d);
     const min = parseTimeInput(t);
     if (day === undefined || min === undefined) return;
     const res = new Date(day);
     res.setHours(Math.floor(min / 60), min % 60, 0, 0);
-    if (res.getTime() > now + 60000) return;
+    if (res.getTime() > Date.now() + 60000) return;
     draft.set({ when: res.getTime(), bgTime: undefined });
-    setBgText(t);
+    setTyping({});
   }
 
   function setBgOffset(minutes: number) {
-    const t = w.doseTime - minutes * 60000;
-    draft.set({ bgTime: minutes === 0 ? undefined : t });
-    setBgText(toTimeInput(t));
+    draft.set({ bgTime: minutes === 0 ? undefined : w.doseTime - minutes * 60000 });
+    setTyping((t) => ({ ...t, bg: undefined }));
   }
 
-  function applyBgTime(text: string) {
+  function commitBgTime(text: string) {
     const min = parseTimeInput(text);
     if (min === undefined) return;
     const d = new Date(w.doseTime);
@@ -132,11 +131,20 @@ export function WhenCard({ now }: { now: number }) {
     let t = d.getTime();
     if (t > w.doseTime) t -= 86400000; // yemekten sonraki saat girildiyse bir önceki gün (gece yarısı aşımı)
     draft.set({ bgTime: t });
+    setTyping((p) => ({ ...p, bg: undefined }));
   }
 
   return (
     <View style={{ gap: Space.md }}>
       <MealChips value={w.meal} auto={w.isAuto} onChange={(m) => draft.set({ meal: m })} />
+      {w.retro ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space.sm }}>
+          <T variant="small" style={{ flex: 1 }}>
+            Kayıt {toDateInput(w.doseTime) === toDateInput(now) ? 'bugün' : toDateInput(w.doseTime)} {toTimeInput(w.doseTime)} için girilecek
+          </T>
+          <Chip label="Şimdiye dön" icon="refresh" onPress={() => setDose(undefined)} />
+        </View>
+      ) : null}
       <Collapsible title="Zaman" icon="time-outline">
         <T variant="muted">{summary(w.doseTime, w.bgTime, now, w.retro)}</T>
         <View style={{ gap: 6 }}>
@@ -145,13 +153,27 @@ export function WhenCard({ now }: { now: number }) {
           </T>
           <View style={wrapRow}>
             {DOSE_OFFSETS.map((o) => (
-              <Chip key={o.label} label={o.label} active={o.minutes === 0 ? !w.retro : false} onPress={() => setDose(o.minutes === 0 ? undefined : now - o.minutes * 60000)} />
+              <Chip key={o.label} label={o.label} active={o.minutes === 0 ? !w.retro : false} onPress={() => setDose(o.minutes === 0 ? undefined : Date.now() - o.minutes * 60000)} />
             ))}
-            <Chip label="Dün" onPress={() => setDose(now - 86400000)} />
+            <Chip label="Dün" onPress={() => setDose(Date.now() - 86400000)} />
           </View>
           <Row>
-            <DateField label="Tarih" value={dateText} onChange={(v) => { setDateText(v); applyDateTime(v, timeText); }} />
-            <TimeField label="Saat" value={timeText} onChange={(v) => { setTimeText(v); applyDateTime(dateText, v); }} />
+            <DateField
+              label="Tarih"
+              value={dateShown}
+              onChange={(v) => {
+                setTyping((p) => ({ ...p, date: v }));
+                commitDateTime(v, timeShown);
+              }}
+            />
+            <TimeField
+              label="Saat"
+              value={timeShown}
+              onChange={(v) => {
+                setTyping((p) => ({ ...p, time: v }));
+                commitDateTime(dateShown, v);
+              }}
+            />
           </Row>
         </View>
         <View style={{ gap: 6 }}>
@@ -163,7 +185,14 @@ export function WhenCard({ now }: { now: number }) {
               <Chip key={o.label} label={o.label} active={Math.round((w.doseTime - w.bgTime) / 60000) === o.minutes} onPress={() => setBgOffset(o.minutes)} />
             ))}
           </View>
-          <TimeField label="Ölçüm saati" value={bgText} onChange={(v) => { setBgText(v); applyBgTime(v); }} />
+          <TimeField
+            label="Ölçüm saati"
+            value={bgShown}
+            onChange={(v) => {
+              setTyping((p) => ({ ...p, bg: v }));
+              commitBgTime(v);
+            }}
+          />
           <T variant="small">Ölçüm yemekten önceyse, aradaki insülin ve karbonhidratın etkisi hesaba katılıp şimdiki şeker tahmin edilir.</T>
         </View>
       </Collapsible>

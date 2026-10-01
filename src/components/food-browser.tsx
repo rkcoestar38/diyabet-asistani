@@ -5,13 +5,15 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 
 import { Btn, Card, Field, Notice, Row, Screen, T, Toggle, confirm, parseNum } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
-import { CATEGORIES, FOODS, carbsFor, normalize, type Food } from '@/data/foods-tr';
+import { CATEGORIES, FOODS, MEAT_RULE_CARBS, MEAT_RULE_GRAMS, carbsFor, normalize, per100 as foodPer100, type Food } from '@/data/foods-tr';
 import { fmt } from '@/logic/bolus';
 import { MealChips, useWhen } from '@/components/when';
 import { SameAsBefore } from '@/components/same-meal';
 import { useNow } from '@/lib/hooks';
 import { useDraft } from '@/store/draft';
-import { cartTotal, useFoods } from '@/store/foods';
+import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
+import { useSettings } from '@/store/settings';
+import { toast } from '@/store/toast';
 
 const FAV = 'Favoriler';
 const MINE = 'Benim yemeklerim';
@@ -38,6 +40,8 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
   }, [all, query, category, favorites, customFoods]);
 
   const total = cartTotal(cart);
+  const method = useSettings((s) => s.settings.countMethod);
+  const meatExtra = cartMeatRule(cart);
   const now = useNow(60000);
   const when = useWhen(now);
   const setDraft = useDraft((s) => s.set);
@@ -66,6 +70,14 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
                 </Pressable>
               </View>
             ))}
+            {meatExtra > 0 ? (
+              <View style={[styles.cartRow, { borderColor: c.border }]}>
+                <T style={{ flex: 1 }}>
+                  Et kuralı <T variant="muted">· {MEAT_RULE_GRAMS} g üzeri et</T>
+                </T>
+                <T style={{ fontWeight: '700' }}>+{fmt(meatExtra)} g</T>
+              </View>
+            ) : null}
             {cart.some((i) => i.fatty) ? (
               <Notice level="info" text="Yağlı/proteinli yiyecekler şekeri geç yükseltebilir; 2–3 saat sonra tekrar ölç." />
             ) : null}
@@ -84,7 +96,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
               />
             </Row>
             <Btn
-              title={picker ? `Tamam (${total} g)` : `Doz hesapla (${total} g)`}
+              title={picker ? `Hesaplamaya dön (${total} g)` : `Doz hesapla (${total} g)`}
               icon={picker ? 'checkmark' : 'calculator'}
               onPress={() => (picker ? router.back() : router.navigate('/'))}
             />
@@ -118,7 +130,9 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
           food={selected}
           onClose={() => setSelected(null)}
           onAdd={(grams) => {
-            addToCart({ foodId: selected.id, name: selected.name, grams, carbs: carbsFor(selected, grams), fatty: selected.fatty });
+            const item = { foodId: selected.id, name: selected.name, grams, carbs: carbsFor(selected, grams, method), fatty: selected.fatty, meat: selected.meat };
+            addToCart(item);
+            toast(`${selected.name} eklendi · tabakta ${cartTotal([...cart, { ...item, id: 'tmp' }])} g`);
             setSelected(null);
           }}
           favorite={favorites.includes(selected.id)}
@@ -192,12 +206,12 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
                   {favorites.includes(f.id) ? <Ionicons name="star" size={14} color={c.warn} /> : null}
                 </View>
                 <T variant="small">
-                  {f.portions[0].label} ({f.portions[0].grams} g) ≈ {fmt(carbsFor(f, f.portions[0].grams), 0)} g KH
+                  {f.portions[0].label} ({f.portions[0].grams} g) ≈ {fmt(carbsFor(f, f.portions[0].grams, method), 1)} g KH
                   {f.fatty ? ' · yağlı' : ''}
                   {f.fast ? ' · hızlı' : ''}
                 </T>
               </View>
-              <T variant="muted">{fmt(f.carbsPer100)} g/100</T>
+              <T variant="muted">{fmt(foodPer100(f, method))} g/100</T>
             </Pressable>
           ))
         )}
@@ -229,7 +243,8 @@ function AddFood({
   const [count, setCount] = useState('1');
   const [gramText, setGramText] = useState('');
   const grams = parseNum(gramText) ?? (parseNum(count) ?? 0) * food.portions[portion].grams;
-  const carbs = carbsFor(food, grams);
+  const method = useSettings((s) => s.settings.countMethod);
+  const carbs = carbsFor(food, grams, method);
 
   return (
     <Card
@@ -246,7 +261,13 @@ function AddFood({
           </Pressable>
         </Row>
       }>
-      <T variant="muted">100 g = {fmt(food.carbsPer100)} g karbonhidrat</T>
+      <T variant="muted">
+        100 g = {fmt(foodPer100(food, method))} g karbonhidrat ({method === 'exchange' ? 'değişim listesi' : 'gerçek bileşim'})
+      </T>
+      {food.meat && method === 'exchange' ? (
+        <T variant="small">Öğünde toplam {MEAT_RULE_GRAMS} g üzeri et tüketirsen +{MEAT_RULE_CARBS} g KHO eklenir.</T>
+      ) : null}
+      <T variant="small">Bir porsiyona dokununca yemek tabağa eklenir. Farklı bir miktar için gram yaz.</T>
       <View style={styles.portions}>
         {food.portions.map((p, i) => {
           const active = i === portion && !gramText;
@@ -254,12 +275,15 @@ function AddFood({
             <Pressable
               key={p.label}
               onPress={() => {
+                // Porsiyona dokununca yemek (adet kadar) doğrudan tabağa eklenir; ayrıca onay gerekmez
                 setPortion(i);
                 setGramText('');
+                onAdd(Math.round((parseNum(count) ?? 1) * p.grams));
               }}
+              accessibilityLabel={`${p.label} ekle`}
               style={[styles.chip, { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : 'transparent' }]}>
               <T variant="small" color={active ? 'primary' : 'text'}>
-                {p.label} ({p.grams} g)
+                {p.label} ({p.grams} g) · {fmt(carbsFor(food, p.grams, method), 1)} g KH
               </T>
             </Pressable>
           );
@@ -276,7 +300,7 @@ function AddFood({
         <T variant="small">karbonhidrat ({fmt(grams, 0)} g yiyecek)</T>
       </View>
       {food.fatty ? <Notice level="info" text="Yağlı/proteinli yiyecek: şeker geç yükselebilir." /> : null}
-      <Btn title="Tabağa ekle" icon="add-circle" disabled={!(grams > 0)} onPress={() => onAdd(Math.round(grams))} />
+      <Btn title="Bu gramı tabağa ekle" icon="add-circle" disabled={!(grams > 0)} onPress={() => onAdd(Math.round(grams))} />
       {onDelete ? <Btn variant="ghost" icon="trash-outline" title="Bu yemeği sil" onPress={onDelete} /> : null}
     </Card>
   );

@@ -49,6 +49,8 @@ export type Settings = {
   ratioSource: 'doctor' | 'estimate';
   /** Doktor raporunun başlığında görünür (isteğe bağlı) */
   patientName?: string;
+  /** Yiyecek karbonhidratı nasıl sayılır: değişim listesi (1 porsiyon = 15 g) veya gerçek bileşim */
+  countMethod: 'exchange' | 'composition';
   /** Her öğünün başlangıç saati (SS:DD); öğün, kayıt saatine göre otomatik seçilir */
   mealStarts: Record<MealType, string>;
 };

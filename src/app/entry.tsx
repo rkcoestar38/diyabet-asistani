@@ -10,7 +10,7 @@ import { parseDateInput, parseTimeInput, toDateInput, toTimeInput } from '@/lib/
 import { BG_MAX, BG_MIN, fmt } from '@/logic/bolus';
 import { mealAt } from '@/logic/meals';
 import type { ExerciseLevel, LogEntry, LogItem, MealType } from '@/logic/types';
-import { cartTotal, useFoods } from '@/store/foods';
+import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
 
@@ -48,13 +48,17 @@ export default function Entry() {
   const cart = useFoods((s) => s.cart);
   const clearCart = useFoods((s) => s.clearCart);
 
-  const now = useNow(30000);
-  const [start] = useState(() => new Date(existing?.time ?? now));
-  const [date, setDate] = useState(toDateInput(start.getTime()));
-  const [time, setTime] = useState(toTimeInput(start.getTime()));
-  const setWhen = (t: number) => {
-    setDate(toDateInput(t));
-    setTime(toTimeInput(t));
+  const now = useNow(10000);
+  // Düzenlenen kayıtta kayıtlı zaman; yeni kayıtta kullanıcı dokunmadıkça canlı "şimdi"
+  const [dateText, setDateText] = useState<string | undefined>(existing ? toDateInput(existing.time) : undefined);
+  const [timeText, setTimeText] = useState<string | undefined>(existing ? toTimeInput(existing.time) : undefined);
+  const date = dateText ?? toDateInput(now);
+  const time = timeText ?? toTimeInput(now);
+  const setDate = setDateText;
+  const setTime = setTimeText;
+  const setWhen = (t: number | undefined) => {
+    setDateText(t === undefined ? undefined : toDateInput(t));
+    setTimeText(t === undefined ? undefined : toTimeInput(t));
   };
   const [meal, setMeal] = useState<MealType | undefined>(existing?.meal);
   const [bg, setBg] = useState(str(existing?.bg));
@@ -69,7 +73,9 @@ export default function Entry() {
   const [exercise, setExercise] = useState<ExerciseLevel>(existing?.exercise ?? 'none');
   const [note, setNote] = useState(existing?.note ?? '');
 
-  const ts = parseDateTime(date, time);
+  // "Şimdi" seçiliyken saat, kaydetme anındaki gerçek zaman olur
+  const untouched = dateText === undefined && timeText === undefined && !existing;
+  const ts = untouched ? now : parseDateTime(date, time);
   const autoMeal = ts !== undefined ? mealAt(ts, settings.mealStarts) : 'sabah';
   const mealValue = meal ?? autoMeal;
 
@@ -104,15 +110,28 @@ export default function Entry() {
   const empty = Object.values(values).every((v) => v === undefined) && !note.trim() && exercise === 'none';
 
   const cartCarbs = cartTotal(cart);
-  const useCart = () => {
-    setItems(cart.map((i) => ({ foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })));
+  const applyCart = () => {
+    const rule = cartMeatRule(cart);
+    setItems([
+      ...cart.map((i) => ({ foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })),
+      ...(rule > 0 ? [{ foodId: 'rule-meat', name: 'Et kuralı (100 g üzeri et)', grams: 0, carbs: rule }] : []),
+    ]);
     setCarbs(String(cartCarbs));
   };
+  // Tabaktaki yemekler değişince (veya ekran tabakla açılınca) kayda kendiliğinden aktarılır; onay gerekmez.
+  // Var olan kayıt düzenlenirken, kayıtlı yemekler yalnızca yeni yemek seçilirse değişir.
+  const cartSig = cart.map((i) => i.id).join(',');
+  const [seenSig, setSeenSig] = useState(existing ? cartSig : '');
+  if (cartSig !== seenSig) {
+    setSeenSig(cartSig);
+    if (cart.length > 0) applyCart();
+  }
   const itemsTotal = items ? Math.round(items.reduce((s, i) => s + i.carbs, 0)) : 0;
 
   function save() {
+    const savedAt = untouched ? Date.now() : ts!;
     const entry: Omit<LogEntry, 'id'> = {
-      time: ts!,
+      time: savedAt,
       bgTime: values.bg !== undefined ? bgTime : undefined,
       meal: mealValue,
       ...Object.fromEntries(Object.entries(values).filter(([k, v]) => v !== undefined && (k === 'ketones' || v !== 0))),
@@ -146,10 +165,10 @@ export default function Entry() {
           </T>
           <View style={wrapRow}>
             {OFFSETS.map((o) => (
-              <Chip key={o.label} label={o.label} onPress={() => setWhen(now - o.minutes * 60000)} />
+              <Chip key={o.label} label={o.label} active={o.minutes === 0 && untouched} onPress={() => setWhen(o.minutes === 0 ? undefined : now - o.minutes * 60000)} />
             ))}
-            <Chip label="Bugün" onPress={() => setDate(toDateInput(now))} active={date === toDateInput(now)} />
-            <Chip label="Dün" onPress={() => setDate(toDateInput(now - 86400000))} active={date === toDateInput(now - 86400000)} />
+            <Chip label="Bugün" onPress={() => { setDate(toDateInput(now)); setTime(time); }} active={date === toDateInput(now)} />
+            <Chip label="Dün" onPress={() => { setDate(toDateInput(now - 86400000)); setTime(time); }} active={date === toDateInput(now - 86400000)} />
           </View>
         </View>
         <Row>
@@ -191,9 +210,6 @@ export default function Entry() {
             </T>
             <T variant="small">{items.map((i) => `${i.name} ${fmt(i.grams, 0)} g`).join(', ')}</T>
           </View>
-        ) : null}
-        {cart.length > 0 && !items ? (
-          <Btn small variant="secondary" icon="restaurant" title={`Tabaktaki yemekleri kullan (${cartCarbs} g)`} onPress={useCart} />
         ) : null}
         <Row>
           <Btn small variant="secondary" icon="list" title={items?.length ? 'Yemekleri değiştir' : 'Yemek listesinden seç'} onPress={() => router.push('/pick-foods' as Href)} style={{ flexGrow: 1 }} />

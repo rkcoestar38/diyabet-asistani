@@ -33,6 +33,7 @@ const settings: Settings = {
   onboarded: true,
   ratioSource: 'doctor',
   mealStarts: { gece: '00:00', sabah: '06:00', sabahAra: '09:30', ogle: '12:00', ogleAra: '15:00', aksam: '18:30', aksamAra: '21:00' },
+  countMethod: 'exchange',
 };
 const profile = { dia: 4, peak: 75 };
 
@@ -662,5 +663,56 @@ describe('update versions', () => {
     expect(u.compareVersions('1.0', '1.0.0')).toBe(0);
     expect(u.compareVersions('1.0.0', '1.0.1')).toBe(-1);
     expect(u.compareVersions('2.0.0-beta', '1.9.0')).toBe(1);
+  });
+});
+
+describe('exchange list counting', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const d = require('../../data/foods-tr') as typeof import('../../data/foods-tr');
+  const food = (name: string) => d.FOODS.find((f) => f.name === name)!;
+  const portion = (name: string, i = 0) => food(name).portions[i];
+  const ex = (name: string, i = 0) => d.carbsFor(food(name), portion(name, i).grams, 'exchange');
+
+  it('basic exchange portions are 15 g (milk and yoghurt 10 g per glass)', () => {
+    expect(ex('Beyaz ekmek')).toBeCloseTo(15);
+    expect(ex('Elma')).toBeCloseTo(15);
+    expect(ex('Portakal')).toBeCloseTo(15);
+    expect(ex('Muz')).toBeCloseTo(15);
+    expect(ex('Üzüm')).toBeCloseTo(15);
+    expect(ex('Çavdar ekmeği')).toBeCloseTo(15);
+    expect(ex('Simit', 0)).toBeGreaterThan(0);
+    expect(d.carbsFor(food('Süt'), 200, 'exchange')).toBeCloseTo(10);
+    expect(d.carbsFor(food('Yoğurt'), 200, 'exchange')).toBeCloseTo(10);
+  });
+  it('soups: one small bowl = one bread exchange (15 g)', () => {
+    for (const n of ['Mercimek çorbası', 'Tarhana çorbası', 'Yayla çorbası', 'Ezogelin çorbası', 'Tavuk şehriye çorbası']) {
+      expect(ex(n, 0)).toBeCloseTo(15);
+    }
+  });
+  it('dietitian rules for lahmacun, wrap and hamburger', () => {
+    expect(ex('Lahmacun')).toBeCloseTo(45);
+    expect(ex('Tavuk döner dürüm')).toBeCloseTo(45);
+    const h = ex('Hamburger');
+    expect(h).toBeGreaterThanOrEqual(35);
+    expect(h).toBeLessThanOrEqual(40);
+  });
+  it('eggs, meat, cheese and oils count as zero', () => {
+    for (const n of ['Haşlanmış yumurta', 'Omlet', 'Izgara et / tavuk / balık', 'Izgara köfte', 'Tavuk sote', 'Beyaz peynir', 'Zeytin']) {
+      expect(d.carbsFor(food(n), 500, 'exchange')).toBe(0);
+    }
+    expect(d.carbsFor(food('Haşlanmış yumurta'), 500, 'composition')).toBe(0);
+  });
+  it('meat rule: more than 100 g meat in one meal adds 10 g, only in exchange mode', () => {
+    const m = (grams: number) => ({ meat: true, grams });
+    expect(d.meatRule([m(100)])).toBe(0);
+    expect(d.meatRule([m(101)])).toBe(10);
+    expect(d.meatRule([m(60), m(60)])).toBe(10);
+    expect(d.meatRule([m(60), { meat: false, grams: 200 }])).toBe(0);
+    expect(d.meatRule([m(200)], 'composition')).toBe(0);
+  });
+  it('foods without a list entry fall back to real composition', () => {
+    const f = food('Su böreği');
+    expect(d.per100(f, 'exchange')).toBe(f.carbsPer100);
+    expect(d.per100(food('Lahmacun'), 'composition')).toBe(food('Lahmacun').carbsPer100);
   });
 });

@@ -1,5 +1,5 @@
-import { router, type Href } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Collapsible, Help } from '@/components/guide';
@@ -10,7 +10,7 @@ import { WaterLevel } from '@/components/water';
 import { WhenCard, useWhen } from '@/components/when';
 import { Btn, Card, Field, KV, Notice, Pressy, Row, Screen, Segmented, T, Toggle, parseNum, useCountUp } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
-import { useCob, useIob, useNow } from '@/lib/hooks';
+import { currentTime, useCob, useIob, useNow } from '@/lib/hooks';
 import { toTimeInput } from '@/lib/input';
 import { estimateBgAt } from '@/logic/bgtime';
 import { calcBolus, carbsForDose, carbsToTarget, checkBg, fmt } from '@/logic/bolus';
@@ -20,7 +20,7 @@ import { icrSample } from '@/logic/ratios';
 import { activeBlock, blockEnd, parseHHMM, scheduleProblems, sortBlocks } from '@/logic/schedule';
 import type { ExerciseLevel, Warning } from '@/logic/types';
 import { useDraft } from '@/store/draft';
-import { cartTotal, useFoods } from '@/store/foods';
+import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
 import { useTests } from '@/store/tests';
@@ -39,7 +39,7 @@ const EXERCISE_LABEL = { none: 'yok', light: 'hafif', moderate: 'orta', intense:
 
 export default function Calculator() {
   const c = useTheme();
-  const now = useNow();
+  const now = useNow(10000);
   const settings = useSettings((s) => s.settings);
   const entries = useLog((s) => s.entries);
   const addLog = useLog((s) => s.add);
@@ -48,12 +48,25 @@ export default function Calculator() {
   const activeTest = useTests((s) => s.active);
   const startTest = useTests((s) => s.start);
   const when = useWhen(now);
+  // Ekrana her dönüşte, uzun süre önce bırakılmış geçmişe dönük zaman/öğün seçimini sıfırla
+  useFocusEffect(
+    useCallback(() => {
+      useDraft.getState().expire(15 * 60000);
+    }, []),
+  );
   const iobNow = useIob(now);
   const cobNow = useCob(now);
 
   const [mode, setMode] = useState<Mode>('meal');
   const [bgText, setBgText] = useState('');
-  const [carbText, setCarbText] = useState('');
+  const cartSum = cartTotal(cart);
+  const [carbText, setCarbText] = useState(() => (cartSum > 0 ? String(cartSum) : ''));
+  // Tabaktaki yemekler değişince karbonhidrat alanı kendiliğinden güncellenir (onay gerekmez)
+  const [seenCart, setSeenCart] = useState(cartSum);
+  if (cartSum !== seenCart) {
+    setSeenCart(cartSum);
+    setCarbText(cart.length > 0 ? String(cartSum) : '');
+  }
   const [unitText, setUnitText] = useState('');
   const [exercise, setExercise] = useState<ExerciseLevel>('none');
   // Elle seçilen dilim, yalnızca seçildiği andaki otomatik dilim geçerliyken kullanılır (saat ilerleyince sıfırlanır)
@@ -143,11 +156,19 @@ export default function Calculator() {
 
   function save(dose: number) {
     const given = parseNum(givenText) ?? dose;
-    const items = mode === 'meal' && cart.length ? cart.map((i) => ({ foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })) : undefined;
+    const rule = cartMeatRule(cart);
+    const items =
+      mode === 'meal' && cart.length
+        ? [
+            ...cart.map((i) => ({ foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })),
+            ...(rule > 0 ? [{ foodId: 'rule-meat', name: 'Et kuralı (100 g üzeri et)', grams: 0, carbs: rule }] : []),
+          ]
+        : undefined;
+    const savedAt = when.retro ? when.doseTime : currentTime();
     const entry = addLog({
-      time: when.doseTime,
+      time: savedAt,
       bg: bgMeasured,
-      bgTime: bgMeasured !== undefined && when.bgEarlier ? when.bgTime : undefined,
+      bgTime: bgMeasured !== undefined && when.bgEarlier ? Math.min(when.bgTime, savedAt) : undefined,
       meal: when.meal,
       carbs: mode === 'meal' && carbs > 0 ? carbs : undefined,
       bolus: given > 0 ? given : undefined,
@@ -175,7 +196,7 @@ export default function Calculator() {
 
   function saveMeasurement() {
     if (bgMeasured === undefined) return;
-    const entry = addLog({ time: when.bgTime, bg: bgMeasured, meal: when.meal });
+    const entry = addLog({ time: when.bgEarlier || when.retro ? when.bgTime : currentTime(), bg: bgMeasured, meal: when.meal });
     resetForm();
     toast(`Şeker ${bgMeasured} kaydedildi (${toTimeInput(entry.time)})`, { label: 'Geri al', onPress: () => useLog.getState().remove(entry.id) });
   }
@@ -278,7 +299,7 @@ export default function Calculator() {
               icon="flask"
               style={{ flexGrow: 1 }}
               onPress={() => {
-                startTest({ kind: 'icr', entryId: testOffer, startTime: Date.now() });
+                startTest({ kind: 'icr', entryId: testOffer, startTime: currentTime() });
                 setTestOffer(null);
                 router.push('/test');
               }}
@@ -323,14 +344,12 @@ export default function Calculator() {
         {mode === 'meal' ? (
           <>
             {cart.length > 0 ? (
-              <Pressable onPress={() => setCarbText('')} style={[styles.cartBox, { borderColor: c.primary }]}>
+              <View style={[styles.cartBox, { borderColor: c.primary }]}>
                 <T style={{ flex: 1 }}>
-                  Tabağın: <T style={{ fontWeight: '700' }}>{cartCarbs} g</T> ({cart.length} yemek)
+                  Tabaktan hesaplandı: <T style={{ fontWeight: '700' }}>{cartCarbs} g</T> ({cart.length} yemek)
                 </T>
-                <T color="primary" style={{ fontWeight: '700' }}>
-                  {carbText === '' ? 'Kullanılıyor' : 'Tabağı kullan'}
-                </T>
-              </Pressable>
+                <Btn small variant="ghost" icon="close" title="Temizle" onPress={clearCart} />
+              </View>
             ) : null}
             <SameAsBefore meal={when.meal} before={when.doseTime} />
             <Row>
