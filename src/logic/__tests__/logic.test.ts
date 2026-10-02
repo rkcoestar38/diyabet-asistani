@@ -11,6 +11,8 @@ import { analyzeIcr, analyzeIsf, averageTdd, basalTestResult, estimateFromTdd, i
 import { computeStats } from '../stats';
 import { activeBlock, blockEnd, blockProblems, inLimit, parseHHMM, scheduleProblems } from '../schedule';
 import { awaitingPost, mealBefore, postOf } from '../postmeal';
+import { backupDue } from '../../store/backup';
+import { attention, recentEval, basalSentence, basalSummary, blockSuggestions, evaluate, fastingWindows, mealGroupStats, periodSeries, trendOf, trendSentence } from '../optimizer';
 import { assessHypo, chooseRise, followUpSnack, hypoRiseSamples, personalRise, quickCarbOptions } from '../hypo';
 import type { LogEntry, Settings, TimeBlock } from '../types';
 
@@ -934,5 +936,236 @@ describe('raporda yemek başına karbonhidrat', () => {
     const e: LogEntry = { id: 'f', time: new Date(2026, 9, 1, 12).getTime(), carbs: 45, bolus: 4, items: [{ foodId: 'simit', name: 'Simit', grams: 100, carbs: 45 }] };
     const html = rep.buildReportHtml({ entries: [e], settings, from: new Date(2026, 9, 1).getTime(), to: new Date(2026, 9, 2).getTime() });
     expect(html).toContain('Simit 100 g · 45 g KH');
+  });
+});
+
+describe('hastane değişim listesi (Kayseri Şehir Hastanesi)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const d = require('../../data/foods-tr') as typeof import('../../data/foods-tr');
+  const food = (name: string) => d.FOODS.find((f) => f.name === name)!;
+  const carbs = (name: string, label: string) => {
+    const f = food(name);
+    const p = f.portions.find((x) => x.label.startsWith(label));
+    if (!p) throw new Error(`${name}: "${label}" porsiyonu yok`);
+    return d.carbsFor(f, p.grams, 'exchange');
+  };
+
+  it('1 porsiyon = 15 g KHO olan ekmek ve tahıl grubu', () => {
+    const rows: [string, string][] = [
+      ['Beyaz ekmek', '1 ince dilim'], ['Tam buğday ekmeği', '1 ince dilim'], ['Kepekli ekmek', '1 ince dilim'], ['Çavdar ekmeği', '1 ince dilim'],
+      ['Yulaf ekmeği', '1 ince dilim'], ['Hamburger ekmeği', '1/2 adet'], ['Böreklik yufka', '1/6 adet'], ['Galeta', '1,5 büyük boy'],
+      ['Tuzlu / diyet bisküvi', '4 adet'], ['Un (buğday / pirinç / bezelye)', '3 silme'], ['Tarhana çorbası', '1 küçük kase'],
+      ['Şehriye çorbası', '1 küçük kase'], ['Pirinç çorbası', '1 küçük kase'], ['Mercimek çorbası', '1 küçük kase'],
+      ['Pirinç pilavı', '2 yemek kaşığı'], ['Bulgur pilavı', '3 yemek kaşığı'], ['Yarma (aşurelik buğday)', '3 yemek kaşığı'],
+      ['Makarna (haşlanmış)', '3 yemek kaşığı'], ['Erişte (haşlanmış)', '3 yemek kaşığı'],
+      ['Kuru fasulye / nohut / kuru barbunya (kuru)', '3 yemek kaşığı'], ['Yeşil mercimek (kuru)', '2 yemek kaşığı'],
+      ['Bezelye', '3 yemek kaşığı'], ['Haşlanmış patates', '1 küçük boy'], ['Kestane', '4 orta boy'], ['Haşlanmış mısır', '1 küçük koçan'],
+      ['Bardak mısır (yağsız)', '4 yemek kaşığı'], ['Patlamış mısır', '3 su bardağı'], ['Leblebi', '1/2 çay bardağı'],
+      ['Mısır gevreği', '3 yemek kaşığı'], ['Yulaf ezmesi (kuru)', '2 yemek kaşığı'],
+    ];
+    for (const [n, l] of rows) expect(carbs(n, l)).toBeCloseTo(15, 1);
+  });
+  it('süt grubu: 1 porsiyon = 10 g KHO (yoğurt 100 ml = 5 g, ayran 200 ml ≈ 7 g)', () => {
+    expect(carbs('Süt', '1 su bardağı')).toBeCloseTo(10, 1);
+    expect(carbs('Yoğurt', '1 su bardağı')).toBeCloseTo(10, 1);
+    expect(carbs('Yoğurt', '1 çay bardağı')).toBeCloseTo(5, 1);
+    expect(carbs('Ayran', '1,5 su bardağı')).toBeCloseTo(10, 1);
+    expect(carbs('Ayran', '1 su bardağı')).toBeCloseTo(6.67, 1);
+    expect(carbs('Kefir', '1 su bardağı')).toBeCloseTo(10, 1);
+  });
+  it('meyve: 1 porsiyon = 15 g KHO (meyve suyu 100 ml = 15 g)', () => {
+    const rows: [string, string][] = [
+      ['Elma', '1 orta boy'], ['Armut', '1 küçük boy'], ['Portakal', '1 orta boy'], ['Mandalina', '2 orta boy'], ['Muz', '1 küçük boy'],
+      ['Çilek', '18 orta boy'], ['Karpuz', '1 dilim'], ['Kavun', '1/8 küçük boy'], ['Üzüm', '25 adet'], ['Şeftali', '1 orta boy'],
+      ['Kuru kayısı', '25 g'], ['Kuru incir', '25 g'], ['Hurma (kuru)', '25 g'], ['Portakal suyu', '1 çay bardağı'],
+    ];
+    for (const [n, l] of rows) expect(carbs(n, l)).toBeCloseTo(15, 1);
+    expect(carbs('Mandalina', '1 orta boy')).toBeCloseTo(7.5, 1);
+  });
+  it('sebze, et, yumurta, peynir, yağ = 0 g; kuruyemiş 100 g = 10 g', () => {
+    for (const n of ['Domates', 'Salatalık', 'Çoban / yeşil salata', 'Etli taze fasulye', 'Türlü', 'Karnıyarık', 'Haşlanmış yumurta', 'Izgara et / tavuk / balık',
+      'Beyaz peynir', 'Kaşar peyniri', 'Lor peyniri', 'Tulum peyniri', 'Zeytinyağı / sıvı yağ', 'Zeytin']) {
+      expect(d.carbsFor(food(n), 300, 'exchange')).toBe(0);
+    }
+    for (const n of ['Fındık', 'Ceviz', 'Badem', 'Antep fıstığı', 'Kaju']) expect(d.carbsFor(food(n), 100, 'exchange')).toBeCloseTo(10, 5);
+  });
+  it('sebze yemeğindeki pirinç/bulgur: 1 yemek kaşığı = 1 g', () => {
+    const f = food('Sebze yemeğindeki pirinç / bulgur (kaşık sayısı)');
+    expect(d.carbsFor(f, 1, 'exchange')).toBeCloseTo(1, 5);
+    expect(d.carbsFor(f, 4, 'exchange')).toBeCloseTo(4, 5);
+  });
+  it('komplike yemekler: lahmacun 45 g, yaprak sarma 7–8 adet 15 g, simit 100 g = 60 g (1/4 = 15 g)', () => {
+    expect(carbs('Lahmacun', '1 adet')).toBeCloseTo(45, 1);
+    expect(carbs('Zeytinyağlı yaprak sarma', '7–8')).toBeCloseTo(15, 1);
+    expect(carbs('Simit', '1 adet')).toBeCloseTo(60, 1);
+    expect(carbs('Simit', '1/4')).toBeCloseTo(15, 1);
+  });
+  it('100 g üzeri et kuralı korunur', () => {
+    expect(d.meatRule([{ meat: true, grams: 150 }])).toBe(10);
+  });
+});
+
+describe('sürekli oran analizi (optimizer)', () => {
+  const NOWO = new Date(2026, 8, 30, 23).getTime();
+  const DAYMS = 86400000;
+  // daysAgo gün önce öğle yemeği (12:00), 4 saat sonra ölçüm: post 110 → gerçekleşen KH oranı 10, post 190 → 7,5
+  const lunch = (daysAgo: number, post: number | null, extra: Partial<LogEntry> = {}): LogEntry[] => {
+    const t = new Date(NOWO - daysAgo * DAYMS).setHours(12, 0, 0, 0);
+    return [
+      { id: `L${daysAgo}`, time: t, bg: 110, carbs: 60, bolus: 6, ...extra },
+      ...(post === null ? [] : [{ id: `P${daysAgo}`, time: t + 4 * 3600000, bg: post } as LogEntry]),
+    ];
+  };
+  const days = (list: number[], post: number | null) => list.flatMap((d) => lunch(d, post));
+  const ev = (log: LogEntry[]) => evaluate(log, { blocks: [block], dia: 4, peak: 75, mealStarts: settings.mealStarts }, NOWO);
+
+  it('öğün örneklerini kahvaltı/öğle/akşam grubuna ayırır, ayarlıya oranını bulur', () => {
+    const e = ev(days([1, 2, 3], 190));
+    expect(e.icr).toHaveLength(3);
+    expect(e.icr[0]).toMatchObject({ group: 'ogle', current: 10 });
+    expect(e.icr[0].rel).toBeCloseTo(0.75, 2);
+    const g = mealGroupStats(e.icr, 'icr');
+    expect(g.find((x) => x.key === 'ogle')).toMatchObject({ n: 3, observed: 7.5, suggested: 8 });
+    expect(g.find((x) => x.key === 'sabah')).toMatchObject({ n: 0 });
+  });
+  it('3 örnekten azında öneri vermez', () => {
+    const g = mealGroupStats(ev(days([1, 2], 190)).icr, 'icr').find((x) => x.key === 'ogle')!;
+    expect(g.n).toBe(2);
+    expect(g.suggested).toBeUndefined();
+  });
+  it('tokluk ölçümü olmayan öğünlerin nedenini sayar ve ipucu verir', () => {
+    const e = ev([...lunch(10, null), ...lunch(9, null), ...lunch(8, 110)]);
+    expect(e.icr).toHaveLength(1);
+    expect(e.rejected[0]).toMatchObject({ reason: 'Yemekten 2,5–5 saat sonra şeker ölçümü yok', count: 2 });
+    expect(e.rejected[0].tip).toContain('Tokluk');
+  });
+  it('dönemler arası değişimi yakalar: öncesinde oran tutuyordu, son 4 haftada daha fazla insülin gerekiyor', () => {
+    const e = ev([...days([40, 45, 50, 55], 110), ...days([2, 5, 9, 14], 190)]);
+    const t = trendOf(e.icr, NOWO);
+    expect(t.verdict).toBe('more');
+    expect(t.gap).toBeCloseTo(-0.25, 2);
+    expect(t.changePct).toBe(-25);
+    expect(trendSentence('icr', t)).toContain('daha fazla insülin');
+    const p = periodSeries(e, NOWO);
+    expect(p[0].icr.value).toBeCloseTo(7.5, 1);
+    expect(p.find((x) => x.icr.value === 10)).toBeDefined();
+  });
+  it('yeterli örnek yoksa gidişat bilinmiyor', () => {
+    expect(trendOf(ev(days([1, 2], 190)).icr, NOWO).verdict).toBe('unknown');
+  });
+  it('ayarlı orandan %10 az sapma "stabil"', () => {
+    expect(trendOf(ev(days([1, 3, 6], 110)).icr, NOWO).verdict).toBe('stable');
+  });
+  it('uygulanabilir öneri varsa ana sayfa uyarısı verir', () => {
+    expect(attention(ev(days([1, 2, 3], 190)), { blocks: [block] }, NOWO)).toContain('Karbonhidrat');
+    expect(attention(ev(days([1, 2, 3], 110)), { blocks: [block] }, NOWO)).toBeUndefined();
+    expect(blockSuggestions(ev(days([1, 2, 3], 190)).icr, [block], 'icr')[0].suggested).toBe(8);
+  });
+
+  const night = (daysAgo: number, evening: number, morning: number, extra: LogEntry[] = []): LogEntry[] => {
+    const d = new Date(NOWO - daysAgo * DAYMS);
+    const t = (h: number, m = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
+    const next = (h: number, m = 0) => t(h, m) + DAYMS;
+    return [
+      { id: `d${daysAgo}`, time: t(18), carbs: 60, bolus: 6 },
+      { id: `e${daysAgo}`, time: t(23), bg: evening },
+      { id: `m${daysAgo}`, time: next(7), bg: morning, carbs: 40, bolus: 4 },
+      ...extra,
+    ];
+  };
+  const fs = { dia: 4, peak: 75, hypoThreshold: 70 };
+  it('gece açlık penceresi: akşam ve sabah ölçümünden saatlik değişim', () => {
+    const log = [1, 2, 3, 4].flatMap((d) => night(d, 120, 200));
+    const w = fastingWindows(log, fs, NOWO);
+    expect(w).toHaveLength(4);
+    expect(w[0]).toMatchObject({ drift: 80, hours: 8, perHour: 10 });
+    const b = basalSummary(w, 14);
+    expect(b).toMatchObject({ verdict: 'rising', suggestedDose: 15 });
+    expect(basalSentence(b)).toContain('yükseliyor');
+  });
+  it('gece düşüyorsa bazal azaltma önerir; sabit ise doz değişmez', () => {
+    const fall = basalSummary(fastingWindows([1, 2, 3].flatMap((d) => night(d, 180, 100)), fs, NOWO), 14);
+    expect(fall).toMatchObject({ verdict: 'falling', suggestedDose: 13 });
+    const flat = basalSummary(fastingWindows([1, 2, 3].flatMap((d) => night(d, 120, 124)), fs, NOWO), 14);
+    expect(flat.verdict).toBe('ok');
+    expect(flat.suggestedDose).toBeUndefined();
+  });
+  it('gece atıştırma, hipo veya yetersiz örnek pencereyi geçersiz kılar', () => {
+    const snack = night(1, 120, 200, [{ id: 's', time: new Date(NOWO - DAYMS).setHours(26, 0, 0, 0), carbs: 15 }]);
+    expect(fastingWindows(snack, fs, NOWO)).toHaveLength(0);
+    expect(fastingWindows(night(1, 120, 60), fs, NOWO)).toHaveLength(0); // sabah hipo
+    expect(basalSummary(fastingWindows([1, 2].flatMap((d) => night(d, 120, 200)), fs, NOWO), 14).verdict).toBe('unknown');
+  });
+});
+
+describe('öneriler güncel kayıtlara göre (eski kayıtlar etkilemez)', () => {
+  const NOWR = new Date(2026, 8, 30, 23).getTime();
+  const D = 86400000;
+  const lunchR = (daysAgo: number, post: number): LogEntry[] => {
+    const t = new Date(NOWR - daysAgo * D).setHours(12, 0, 0, 0);
+    return [
+      { id: `L${daysAgo}`, time: t, bg: 110, carbs: 60, bolus: 6 },
+      { id: `P${daysAgo}`, time: t + 4 * 3600000, bg: post },
+    ];
+  };
+  it('eski (>6 hafta) örnekler öneriyi değiştirmez; son 6 hafta belirleyicidir', () => {
+    // 60–80 gün önce oran tutuyordu (post 110 → 10), son günlerde daha fazla insülin gerekiyor (post 190 → 7,5)
+    const old = [60, 65, 70, 75, 80].flatMap((d) => lunchR(d, 110));
+    const recentLog = [1, 2, 3].flatMap((d) => lunchR(d, 190));
+    const all = evaluate([...old, ...recentLog], { blocks: [block], dia: 4, peak: 75, mealStarts: settings.mealStarts }, NOWR);
+    expect(all.icr).toHaveLength(8);
+    const rec = recentEval(all, NOWR);
+    expect(rec.icr).toHaveLength(3);
+    expect(blockSuggestions(rec.icr, [block], 'icr')[0].suggested).toBe(8);
+    expect(attention(all, { blocks: [block] }, NOWR)).toContain('Karbonhidrat');
+    // yalnızca eski kayıtlar varsa güncel öneri yok
+    const onlyOld = evaluate(old, { blocks: [block], dia: 4, peak: 75, mealStarts: settings.mealStarts }, NOWR);
+    expect(attention(onlyOld, { blocks: [block] }, NOWR)).toBeUndefined();
+  });
+});
+
+describe('bazal penceresi yüksek başlangıçta geçersiz', () => {
+  it('akşam şeker 180 üstündeyse (yemekten kalan yükseklik) gece düşüşü bazal olarak yorumlanmaz', () => {
+    const n = (daysAgo: number): LogEntry[] => {
+      const d = new Date(new Date(2026, 8, 30, 23).getTime() - daysAgo * 86400000);
+      const t = (h: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h).getTime();
+      return [
+        { id: `x${daysAgo}`, time: t(23), bg: 230 },
+        { id: `y${daysAgo}`, time: t(23) + 8 * 3600000, bg: 110 },
+      ];
+    };
+    expect(fastingWindows([1, 2, 3].flatMap(n), { dia: 4, peak: 75, hypoThreshold: 70 }, new Date(2026, 8, 30, 23).getTime())).toHaveLength(0);
+  });
+});
+
+describe('tokluk ölçümü işaretlenmeden de analize girer', () => {
+  it('düz şeker kaydı (post işareti yok) 3 saat sonra ölçüldüyse aynı örneği üretir', () => {
+    const t = new Date(2026, 8, 20, 12).getTime();
+    const meal: LogEntry = { id: 'm', time: t, bg: 110, carbs: 60, bolus: 6 };
+    const plain = icrSample([meal, { id: 'p', time: t + 3 * 3600000, bg: 190 }], 'm', [block], profile, t + 6 * 3600000);
+    const flagged = icrSample([meal, { id: 'p', time: t + 3 * 3600000, bg: 190, post: true, afterId: 'm' }], 'm', [block], profile, t + 6 * 3600000);
+    expect(plain.ok).toBe(true);
+    expect(plain).toEqual(flagged);
+  });
+  it('2,5 saatten önce veya 5 saatten sonraki ölçüm kullanılmaz', () => {
+    const t = new Date(2026, 8, 20, 12).getTime();
+    const meal: LogEntry = { id: 'm', time: t, bg: 110, carbs: 60, bolus: 6 };
+    expect(icrSample([meal, { id: 'p', time: t + 2 * 3600000, bg: 190 }], 'm', [block], profile, t + 6 * 3600000).ok).toBe(false);
+    expect(icrSample([meal, { id: 'p', time: t + 5.5 * 3600000, bg: 190 }], 'm', [block], profile, t + 8 * 3600000).ok).toBe(false);
+  });
+});
+
+describe('yedek hatırlatması', () => {
+  const NOWB = new Date(2026, 9, 1, 12).getTime();
+  const D = 86400000;
+  it('az kayıtta hatırlatmaz', () => expect(backupDue(5, undefined, undefined, NOWB)).toBe(false));
+  it('hiç yedek yoksa veya 14 günden eskiyse hatırlatır', () => {
+    expect(backupDue(30, undefined, undefined, NOWB)).toBe(true);
+    expect(backupDue(30, NOWB - 15 * D, undefined, NOWB)).toBe(true);
+    expect(backupDue(30, NOWB - 3 * D, undefined, NOWB)).toBe(false);
+  });
+  it('"Sonra" denince ertelenir', () => {
+    expect(backupDue(30, undefined, NOWB + 2 * D, NOWB)).toBe(false);
+    expect(backupDue(30, undefined, NOWB - D, NOWB)).toBe(true);
   });
 });

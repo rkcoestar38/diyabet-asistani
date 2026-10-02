@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { ToastHost } from '@/components/toast';
 import { Font, useScheme, useTheme } from '@/constants/theme';
 import { useHydrated } from '@/lib/hooks';
+import { requestPersistentStorage } from '@/lib/web';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,6 +34,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
+
+  // Web: tarayıcıdan verinin otomatik silinmemesini iste
+  useEffect(() => {
+    requestPersistentStorage();
+  }, []);
 
   if (!ready) return null;
 

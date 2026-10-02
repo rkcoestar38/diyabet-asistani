@@ -71,13 +71,13 @@ export type Suggestion = {
   samples: Sample[];
 };
 
-function median(xs: number[]): number {
+export function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-function clampChange(current: number, observed: number): number {
+export function clampChange(current: number, observed: number): number {
   return Math.min(current * (1 + MAX_CHANGE), Math.max(current * (1 - MAX_CHANGE), observed));
 }
 
@@ -219,7 +219,7 @@ export function analyzeIsf(log: LogEntry[], blocks: TimeBlock[], profile: Insuli
   return buildSuggestions(blocks, byBlock, (b) => b.isf, 1);
 }
 
-function buildSuggestions(
+export function buildSuggestions(
   blocks: TimeBlock[],
   byBlock: Map<string, Sample[]>,
   current: (b: TimeBlock) => number,

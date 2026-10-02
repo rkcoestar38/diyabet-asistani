@@ -43,3 +43,13 @@ npx expo start --web
 ```
 
 Hesaplama mantığı `src/logic/` altındadır (saf fonksiyonlar, testleri `src/logic/__tests__`).
+
+## Web sürümü (iPhone dahil)
+
+`main` dalına her gönderimde GitHub Actions web sürümünü derleyip GitHub Pages'e yayınlar:
+**https://rkcoestar38.github.io/diyabet-asistani/**
+
+- iPhone: Safari'de aç → Paylaş → **Ana Ekrana Ekle** → uygulamayı ana ekrandaki simgesinden aç. Kayıtlar cihazda (tarayıcının yerel depolaması) tutulur, hiçbir sunucuya gitmez.
+- Ana ekran uygulamasının verisi Safari sekmesindekinden ayrıdır; önce ekleyip sonra kayıt gir. Ayarlar'dan düzenli yedek al (JSON).
+- Çevrimdışı açılır (servis çalışanı). Yeni sürüm sayfa yenilenince gelir.
+- Yerelde denemek için: `npx expo export --platform web && BASE= node scripts/web-postbuild.mjs`, sonra `dist` klasörünü bir statik sunucuyla aç.

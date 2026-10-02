@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import { useEffect } from 'react';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 import type { IconName } from '@/components/ui';
@@ -35,6 +36,9 @@ const screens: { name: string; title: string; label: string; icon: IconName }[] 
 export default function TabLayout() {
   const c = useTheme();
   const onboarded = useSettings((s) => s.settings.onboarded);
+  // iPhone'da ana ekran uygulaması: alttaki çubuğun ev göstergesinin altında kalmaması için güvenli alan eklenir
+  const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'web' ? insets.bottom : 0;
   if (!onboarded) return <Redirect href="/onboarding" />;
 
   return (
@@ -42,7 +46,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: c.primary,
         tabBarInactiveTintColor: c.muted,
-        tabBarStyle: { backgroundColor: c.tabBar, borderTopColor: c.border, borderTopWidth: 1, height: 64, paddingTop: 6, paddingBottom: 8 },
+        tabBarStyle: { backgroundColor: c.tabBar, borderTopColor: c.border, borderTopWidth: 1, height: 64 + safeBottom, paddingTop: 6, paddingBottom: 8 + safeBottom },
         tabBarLabelStyle: { fontFamily: Font.semibold, fontSize: 11 },
         headerStyle: { backgroundColor: c.bg },
         headerShadowVisible: false,

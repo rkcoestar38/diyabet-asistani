@@ -1,3 +1,4 @@
+import { analysisHtml } from './analysis-html';
 import { fmt } from './bolus';
 import { MEALS, entryMeal } from './meals';
 import { activeBlock, blockEnd, sortBlocks } from './schedule';
@@ -270,11 +271,13 @@ export type ReportInput = {
   /** Aralığın bitişi (dahil değil; ertesi günün başlangıcı) */
   to: number;
   ratioChanges?: { time: number; blockName: string; field: 'icr' | 'isf'; from: number; to: number }[];
+  /** Biten rehberli bazal testleri */
+  basalTests?: { startTime: number; endTime: number }[];
   generatedAt?: number;
 };
 
 /** Doktora gösterilecek tek sayfalık/çok sayfalık rapor (HTML). PDF'e dönüştürülür. */
-export function buildReportHtml({ entries, settings, from, to, ratioChanges = [], generatedAt = Date.now() }: ReportInput): string {
+export function buildReportHtml({ entries, settings, from, to, ratioChanges = [], basalTests = [], generatedAt = Date.now() }: ReportInput): string {
   const inRange = entries.filter((e) => e.time >= from && e.time < to).sort((a, b) => a.time - b.time);
   const st = rangeStats(inRange, settings);
   const periodLabel = dayLabel(from, false) === dayLabel(to - 1, false) ? dayLabel(from) : `${dayLabel(from, false)} – ${dayLabel(to - 1, false)}`;
@@ -388,6 +391,8 @@ ${mealRows ? `<h2>Öğünlere göre özet</h2><table class=\"meals\"><thead><tr>
 <table><thead><tr><th>Saat dilimi</th><th>Karbonhidrat oranı</th><th>Düzeltme faktörü</th><th>Hedef (mg/dL)</th><th>Hedef aralık</th></tr></thead><tbody>${ratioRows}</tbody></table>
 <div class=\"sub\" style=\"margin-top:6px\">Hızlı insülin: ${esc(settings.rapidName || 'adı girilmedi')} (etki süresi ${fmt(settings.dia)} sa, kalem adımı ${fmt(settings.penStep)} Ü)${settings.basalName || settings.basalDose ? ` · Bazal: ${esc(settings.basalName || '—')}${settings.basalDose ? ` ${fmt(settings.basalDose)} Ü` : ''}${settings.basalTime ? `, saat ${esc(settings.basalTime)}` : ''}` : ''}</div>
 ${changes ? `<div class=\"sub\">Bu aralıkta yapılan oran değişiklikleri:</div><ul>${changes}</ul>` : ''}
+
+${analysisHtml({ entries, settings, now: Math.min(to, generatedAt), basalTests })}
 
 ${svg ? `<h2>Şeker grafiği</h2>${svg}<div class=\"sub\">Yeşil bant: hedef aralık · kırmızı çizgi: ${settings.hypoThreshold} mg/dL</div>` : ''}
 

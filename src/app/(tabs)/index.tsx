@@ -3,6 +3,7 @@ import { router, type Href } from "expo-router";
 import { View } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
+import { BackupReminder, InstallHint } from "@/components/web-hints";
 import { Card, Pressy, T, Screen, type IconName } from "@/components/ui";
 import {
   Radius,
@@ -14,6 +15,7 @@ import {
 import { useIob, useNow } from "@/lib/hooks";
 import { fmt } from "@/logic/bolus";
 import { mealAt, mealLabel } from "@/logic/meals";
+import { attention, evaluate } from "@/logic/optimizer";
 import { awaitingPost } from "@/logic/postmeal";
 import { activeBlock } from "@/logic/schedule";
 import { startOfDay } from "@/logic/stats";
@@ -142,6 +144,7 @@ export default function Home() {
   );
   const bolus = todays.reduce((s, e) => s + (e.bolus ?? 0), 0);
   const waiting = awaitingPost(entries, now);
+  const advice = attention(evaluate(entries, settings, now), settings, now);
 
   const steps: { done: boolean; text: string; to: string }[] = [
     {
@@ -170,6 +173,8 @@ export default function Home() {
   return (
     <Screen>
       <UpdateBanner />
+      <InstallHint />
+      <BackupReminder />
       <View style={{ gap: 2 }}>
         <T variant="title">
           {settings.patientName
@@ -243,6 +248,24 @@ export default function Home() {
             </T>
           </View>
           <Ionicons name="chevron-forward" size={20} color={c.info} />
+        </Pressy>
+      ) : null}
+
+      {advice ? (
+        <Pressy
+          onPress={() => router.navigate({ pathname: '/learn', params: { tab: 'mine' } } as Href)}
+          accessibilityRole="button"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: Space.md, padding: Space.md, borderRadius: Radius.lg, backgroundColor: c.warnBg }}>
+          <Ionicons name="trending-up" size={24} color={c.warn} />
+          <View style={{ flex: 1 }}>
+            <T style={{ fontWeight: '700' }} color="warn">
+              Oranların için öneri var
+            </T>
+            <T variant="small" color="warn">
+              {advice} Dokun, gidişatına bak.
+            </T>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={c.warn} />
         </Pressy>
       ) : null}
 

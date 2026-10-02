@@ -1,15 +1,16 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Choice, Collapsible, Steps } from '@/components/guide';
 import { LabelCalculator } from '@/components/label-calc';
+import { RatioTrend, SuggestionView } from '@/components/ratio-trend';
 import { EstimateForm, RatioEditor, useApplyEstimate } from '@/components/settings-forms';
-import { Btn, Card, KV, Notice, Screen, Segmented, T, confirm, notify } from '@/components/ui';
-import { Radius, Space, useTheme } from '@/constants/theme';
+import { Card, KV, Notice, Screen, Segmented, T, confirm, notify } from '@/components/ui';
+import { Space } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { MAX_CHANGE, MIN_SAMPLES, analyzeIcr, analyzeIsf, averageTdd, estimateFromTdd, type Suggestion } from '@/logic/ratios';
+import { MIN_SAMPLES, analyzeIcr, analyzeIsf, averageTdd, estimateFromTdd } from '@/logic/ratios';
 import { blockEnd, sortBlocks } from '@/logic/schedule';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -18,7 +19,15 @@ import { useTests } from '@/store/tests';
 type Tab = 'find' | 'carbs' | 'mine';
 
 export default function Learn() {
-  const [tab, setTab] = useState<Tab>('find');
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const valid = (t?: string): t is Tab => t === 'find' || t === 'carbs' || t === 'mine';
+  const [tab, setTab] = useState<Tab>(valid(params.tab) ? params.tab : 'find');
+  // Ana sayfadaki kartlar gibi dışarıdan gelen ?tab= isteği, ekran zaten açıkken de uygulanır
+  const [seen, setSeen] = useState(params.tab);
+  if (params.tab !== seen) {
+    setSeen(params.tab);
+    if (valid(params.tab)) setTab(params.tab);
+  }
   return (
     <Screen>
       <Segmented<Tab>
@@ -110,53 +119,6 @@ function StartEstimate() {
   );
 }
 
-function SuggestionView({ kind, s, blockId }: { kind: 'icr' | 'isf'; s: Suggestion; blockId: string }) {
-  const c = useTheme();
-  const updateBlock = useSettings((st) => st.updateBlock);
-  const update = useSettings((st) => st.update);
-  const title = kind === 'icr' ? 'Karbonhidrat oranı' : 'Düzeltme faktörü';
-  const unit = kind === 'icr' ? 'g/Ü' : 'mg/dL/Ü';
-  const diff = s.suggested !== undefined ? s.suggested - s.current : 0;
-  const changed = s.suggested !== undefined && Math.abs(diff) >= (kind === 'icr' ? 0.5 : 1);
-  const meaning = diff < 0 ? 'Daha fazla insülin gerekiyor gibi görünüyor.' : 'Daha az insülin gerekiyor gibi görünüyor.';
-
-  return (
-    <View style={[styles.sugg, { backgroundColor: c.bg }]}>
-      <T variant="h2">{title}</T>
-      <KV k="Şu anki" v={`${fmt(s.current)} ${unit}`} />
-      <KV k="Uygun test/kayıt" v={`${s.samples.length} / ${MIN_SAMPLES}`} />
-      {s.observed !== undefined ? <KV k="Kayıtlara göre gerçekleşen (ortanca)" v={`${fmt(s.observed)} ${unit}`} /> : null}
-      {s.suggested === undefined ? (
-        <T variant="small">Henüz yeterli veri yok. Yukarıdaki testlerden birini yap.</T>
-      ) : changed ? (
-        <>
-          <KV k={`Öneri (en fazla %${MAX_CHANGE * 100} değişim)`} v={`${fmt(s.suggested)} ${unit}`} strong />
-          <Notice level="warn" text={`${meaning}`} />
-          <Btn
-            small
-            variant="secondary"
-            title="Ayarlara uygula"
-            onPress={() =>
-              confirm(
-                'Öneriyi uygula',
-                `${title} ${fmt(s.current)} → ${fmt(s.suggested!)} ${unit} olarak değişecek.`,
-                () => {
-                  updateBlock(blockId, { [kind]: s.suggested }, `Test/kayıt analizi (${s.samples.length} kayıt)`);
-                  update({ ratioSource: 'doctor' });
-                  notify('Güncellendi', 'Yeni oran kaydedildi. Önümüzdeki günlerde sık ölç.');
-                },
-                'Uygula',
-              )
-            }
-          />
-        </>
-      ) : (
-        <Notice level="info" text="Kayıtların bu oranın iyi çalıştığını gösteriyor." />
-      )}
-    </View>
-  );
-}
-
 function CarbGuide() {
   return (
     <>
@@ -198,6 +160,7 @@ function Mine() {
   const est = avg ? estimateFromTdd(avg.tdd) : undefined;
   return (
     <>
+      <RatioTrend />
       <Card title="Oranlarım" icon="options">
         <T variant="muted">Oranların değiştiyse buradan güncelle.</T>
       </Card>
@@ -228,7 +191,3 @@ function Mine() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  sugg: { borderRadius: Radius.md, padding: Space.md, gap: Space.xs },
-});

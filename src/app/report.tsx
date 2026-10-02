@@ -11,6 +11,7 @@ import { buildReportHtml, dayLabel, rangeStats } from '@/logic/report';
 import { getDayOffset, startOfDay } from '@/logic/stats';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
+import { useTests } from '@/store/tests';
 
 const DAY = 86400000;
 type Preset = 'today' | '7' | '14' | '30' | 'custom';
@@ -30,6 +31,7 @@ export default function Report() {
   const settings = useSettings((s) => s.settings);
   const update = useSettings((s) => s.update);
   const history = useSettings((s) => s.ratioHistory);
+  const finishedTests = useTests((s) => s.finished);
   const today = startOfDay(now);
 
   const [preset, setPreset] = useState<Preset>('14');
@@ -73,6 +75,7 @@ export default function Report() {
         from: range.from,
         to: range.to,
         ratioChanges: history,
+        basalTests: finishedTests.filter((t) => t.kind === 'basal'),
       });
       const tag = `${toDateInput(range.from).replace(/\./g, '-')}_${toDateInput(range.to - DAY).replace(/\./g, '-')}`;
       await sharePdf(html, `diyabet-raporu-${tag}.pdf`);

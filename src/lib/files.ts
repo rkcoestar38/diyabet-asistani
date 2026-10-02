@@ -9,13 +9,19 @@ import type { LogEntry, MealType } from '@/logic/types';
 /** Metni dosya olarak paylaşır (telefonda paylaşım menüsü, tarayıcıda indirme). */
 export async function shareText(filename: string, content: string, mimeType: string) {
   if (Platform.OS === 'web') {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
+    // iPhone/Android tarayıcıda önce paylaşım menüsü (Dosyalar'a kaydet, iCloud...), yoksa indirme
+    const file = new window.File([content], filename, { type: mimeType });
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (nav.share && nav.canShare?.({ files: [file] })) {
+      await nav.share({ files: [file], title: filename });
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
     return;
   }
   const file = new File(Paths.cache, filename);

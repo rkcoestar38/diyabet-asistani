@@ -7,7 +7,9 @@ import { InsulinForm, NumField } from '@/components/settings-forms';
 import { Btn, Card, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle, confirm, notify } from '@/components/ui';
 import { useThemePref, type ThemePref } from '@/store/theme';
 import { notificationsSupported, notificationsUnsupportedReason, syncBasalReminder } from '@/lib/notifications';
-import { pickText, shareText } from '@/lib/files';
+import { backupNow } from '@/lib/backup';
+import { pickText } from '@/lib/files';
+import { isWeb } from '@/lib/web';
 import { DEFAULT_MEAL_STARTS, MEALS } from '@/logic/meals';
 import { parseHHMM } from '@/logic/schedule';
 import { useFoods } from '@/store/foods';
@@ -16,7 +18,6 @@ import type { CountMethod as CountMethodValue } from '@/data/foods-tr';
 import { useLog } from '@/store/log';
 import { DEFAULT_SETTINGS, useSettings } from '@/store/settings';
 
-const BACKUP_VERSION = 1;
 
 export default function SettingsScreen() {
   const s = useSettings((st) => st.settings);
@@ -112,7 +113,7 @@ export default function SettingsScreen() {
         </Row>
       </Collapsible>
 
-      <AppVersion />
+      {isWeb ? null : <AppVersion />}
 
       <Backup />
 
@@ -147,10 +148,13 @@ function CountMethodSettings() {
       {method === 'exchange' ? (
         <>
           <T variant="muted">
-            Eğitimde kullanılan değişim listesi: 1 ekmek veya meyve değişimi = 15 g karbonhidrat (KHO), 1 bardak süt/yoğurt = 10 g, sebze değişimi = 6 g,
-            et/yumurta/yağ = 0 g. Karbonhidrat oranını (K/İ) doktorun bu yönteme göre belirliyorsa bunu seç.
+            Hastane eğitimindeki değişim listesi: 1 ekmek, tahıl veya meyve değişimi = 15 g karbonhidrat (KHO), 1 süt grubu değişimi = 10 g. Sebze, et, yumurta,
+            peynir ve yağ = 0 g. Karbonhidrat oranını (K/İ) doktorun bu yönteme göre belirliyorsa bunu seç.
           </T>
-          <T variant="small">Öğünde toplam 100 g üzeri et yersen +10 g KHO eklenir. Listede olmayan yiyeceklerde gerçek bileşim değerleri kullanılır.</T>
+          <T variant="small">
+            Özel kurallar: öğünde toplam 100 g üzeri et +10 g KHO; kuruyemiş ve yağlı tohum 100 g = 10 g KHO; sebze yemeğindeki pirinç/bulgurun her yemek kaşığı +1 g KHO
+            (listedeki “Sebze yemeğindeki pirinç / bulgur” yiyeceğini seçip kaşık sayısını yaz). Listede olmayan yiyeceklerde gerçek bileşim değerleri kullanılır.
+          </T>
         </>
       ) : (
         <T variant="muted">
@@ -228,24 +232,7 @@ function AppVersion() {
 
 function Backup() {
   async function exportBackup() {
-    const data = {
-      app: 'diyabet-asistani',
-      version: BACKUP_VERSION,
-      exportedAt: new Date().toISOString(),
-      settings: useSettings.getState().settings,
-      ratioHistory: useSettings.getState().ratioHistory,
-      log: useLog.getState().entries,
-      foods: {
-        customFoods: useFoods.getState().customFoods,
-        favorites: useFoods.getState().favorites,
-        meals: useFoods.getState().meals,
-      },
-    };
-    try {
-      await shareText(`diyabet-yedek-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
-    } catch (e) {
-      notify('Yedek alınamadı', String(e));
-    }
+    await backupNow();
   }
 
   async function importBackup() {

@@ -1,7 +1,7 @@
 /**
  * Yaklaşık karbonhidrat değerleri. İki sayım yöntemi vardır:
  * - 'composition' (gerçek bileşim): 100 g/ml başına kullanılabilir (lif hariç) karbonhidrat; TürKomp ve etiketlerle uyumlu.
- * - 'exchange' (değişim listesi): 1 ekmek/meyve değişimi = 15 g KHO (süt/yoğurt 1 bardak = 10 g, sebze = 6 g, et/yağ = 0 g).
+ * - 'exchange' (değişim listesi): 1 ekmek/meyve değişimi = 15 g KHO (süt/yoğurt 1 bardak = 10 g, sebze/et/yumurta/peynir/yağ = 0 g).
  *   Türkiye Beslenme Rehberi (TÜBER 2022) değişim listesine ve hastane eğitiminde kullanılan kurallara göre.
  * Tarif, porsiyon ve markaya göre değişir; paketli ürünlerde her zaman etiketi esas al.
  */
@@ -68,6 +68,11 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Galeta', 72, [P('1 adet', 10)]],
     ['Grissini', 70, [P('1 adet', 6)]],
     ['Kaşarlı tost', 30, [P('1 adet', 150)], 'fatty'],
+    ['Yulaf ekmeği', 40, [P('1 ince dilim', 25)]],
+    ['Hamburger ekmeği', 50, [P('1/2 adet', 25), P('1 adet', 50)]],
+    ['Böreklik yufka', 58, [P('1/6 adet', 25)]],
+    ['Tuzlu / diyet bisküvi', 63, [P('4 adet', 25)]],
+    ['Un (buğday / pirinç / bezelye)', 76, [P('3 silme yemek kaşığı', 20)]],
   ],
   'Pilav, Makarna & Tahıl': [
     ['Pirinç pilavı', 30, [P('1 yemek kaşığı', 15), P('1 porsiyon', 150)]],
@@ -86,6 +91,11 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Patates püresi', 15, [P('1 porsiyon', 150)]],
     ['Haşlanmış mısır', 19, [P('1 koçan (yenen)', 100)]],
     ['Patlamış mısır', 74, [P('1 kase', 10)]],
+    ['Kuru fasulye / nohut / kuru barbunya (kuru)', 58, [P('3 yemek kaşığı dolusu', 25)]],
+    ['Yeşil mercimek (kuru)', 55, [P('2 yemek kaşığı dolusu', 25)]],
+    ['Yarma (aşurelik buğday)', 68, [P('3 yemek kaşığı dolusu', 25)]],
+    ['Kestane', 38, [P('4 orta boy', 40)]],
+    ['Bardak mısır (yağsız)', 17, [P('4 yemek kaşığı taneli', 90)]],
   ],
   'Çorbalar': [
     ['Mercimek çorbası', 8, [P('1 kase', 250)]],
@@ -96,6 +106,8 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Tavuk şehriye çorbası', 5, [P('1 kase', 250)]],
     ['Sebze çorbası', 5, [P('1 kase', 250)]],
     ['İşkembe çorbası', 2, [P('1 kase', 250)]],
+    ['Şehriye çorbası', 6, [P('1 kase', 250)]],
+    ['Pirinç çorbası', 7, [P('1 kase', 250)]],
   ],
   'Ana Yemekler': [
     ['Kuru fasulye', 13, [P('1 porsiyon', 200)]],
@@ -121,6 +133,7 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Mantı (yoğurtlu)', 20, [P('1 porsiyon', 300)], 'fatty'],
     ['İçli köfte', 25, [P('1 adet', 70)], 'fatty'],
     ['Mercimek köftesi', 25, [P('1 adet', 30)]],
+    ['Sebze yemeğindeki pirinç / bulgur (kaşık sayısı)', 450, [P('1 yemek kaşığı', 1)]],
   ],
   'Fast Food & Sokak': [
     ['Lahmacun', 35, [P('1 adet', 120)], 'fatty'],
@@ -161,6 +174,9 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Kakaolu fındık kreması', 57, [P('1 tatlı kaşığı', 15)], 'fatty'],
     ['Fıstık ezmesi', 20, [P('1 yemek kaşığı', 15)]],
     ['Krem peynir', 4, [P('1 yemek kaşığı', 20)]],
+    ['Lor peyniri', 3, [P('1 yemek kaşığı', 25)]],
+    ['Tulum peyniri', 1, [P('1 dilim', 30)]],
+    ['Zeytinyağı / sıvı yağ', 0, [P('1 yemek kaşığı', 10)]],
     ['Sucuk', 2, [P('3 dilim', 30)]],
     ['Domates', 4, [P('1 orta boy', 120)]],
     ['Salatalık', 3, [P('1 orta boy', 150)]],
@@ -280,7 +296,7 @@ function slug(s: string) {
 }
 
 /** Değişim listesinde "X g yiyecek = Y g KHO" olarak verilen bir karşılığı 100 g başına değere çevirir */
-const x = (carbs: number, grams: number) => Math.round((carbs / grams) * 100 * 100) / 100;
+const x = (carbs: number, grams: number) => Math.round((carbs / grams) * 100 * 10000) / 10000;
 
 /** Değişim listesi (TÜBER 2022 + hastane eğitimi kuralları) değerleri: yiyecek adı → 100 g başına KHO */
 const EXCHANGE: Record<string, number> = {
@@ -373,6 +389,80 @@ const PORTIONS: Record<string, Portion[]> = {
   'Humus': [{ label: '1 yemek kaşığı', grams: 20 }, { label: '2 yemek kaşığı', grams: 40 }],
 };
 
+
+/**
+ * Kayseri Şehir Hastanesi diyabet eğitimi değişim listesi (güncel; yukarıdaki genel değişim değerlerinin ÜZERİNE yazar).
+ * 1 porsiyon: ekmek/tahıl/meyve = 15 g KHO, süt grubu = 10 g KHO, sebze/et/yumurta/peynir/yağ = 0 g.
+ * Özel kurallar: 100 g üzeri et +10 g; kuruyemiş / yağlı tohum 100 g = 10 g; sebze yemeğindeki pirinç/bulgur 1 yemek kaşığı = 1 g.
+ */
+const HOSPITAL: Record<string, number> = {
+  // Ekmek ve tahıl (15 g)
+  'Kepekli ekmek': x(15, 25), 'Çavdar ekmeği': x(15, 25), 'Yulaf ekmeği': x(15, 25), 'Hamburger ekmeği': x(15, 25),
+  'Böreklik yufka': x(15, 25), 'Galeta': x(15, 20), 'Tuzlu / diyet bisküvi': x(15, 25), 'Un (buğday / pirinç / bezelye)': x(15, 20),
+  'Pirinç pilavı': x(15, 50), 'Bulgur pilavı': x(15, 75), 'Makarna (haşlanmış)': x(15, 50), 'Erişte (haşlanmış)': x(15, 50),
+  'Kuru fasulye / nohut / kuru barbunya (kuru)': x(15, 25), 'Yeşil mercimek (kuru)': x(15, 25), 'Yarma (aşurelik buğday)': x(15, 25),
+  'Şehriye çorbası': x(15, 150), 'Pirinç çorbası': x(15, 150),
+  'Bezelye': x(15, 125), 'Kestane': x(15, 40), 'Haşlanmış patates': x(15, 100), 'Haşlanmış mısır': x(15, 90),
+  'Bardak mısır (yağsız)': x(15, 90), 'Patlamış mısır': x(15, 25), 'Leblebi': x(15, 25), 'Mısır gevreği': x(15, 20), 'Yulaf ezmesi (kuru)': x(15, 25),
+  // Süt grubu (10 g)
+  'Süt': x(10, 200), 'Yoğurt': x(10, 200), 'Ayran': x(10, 300), 'Kefir': x(10, 200),
+  // Meyve (15 g) ve meyve suyu (100 ml = 15 g)
+  'Elma': x(15, 130), 'Armut': x(15, 140), 'Portakal': x(15, 180), 'Mandalina': x(15, 175), 'Muz': x(15, 140), 'Çilek': x(15, 300),
+  'Karpuz': x(15, 220), 'Kavun': x(15, 170), 'Üzüm': x(15, 100), 'Şeftali': x(15, 220),
+  'Kuru kayısı': x(15, 25), 'Kuru incir': x(15, 25), 'Hurma (kuru)': x(15, 25),
+  'Portakal suyu': x(15, 100), 'Vişne / şeftali nektarı': x(15, 100),
+  // Sebze (pişmiş yemekler, yeşillik, çiğ domates/salatalık) = 0 g
+  'Domates': 0, 'Salatalık': 0, 'Havuç': 0, 'Brokoli / karnabahar': 0, 'Kabak': 0, 'Patlıcan': 0, 'Kırmızı pancar': 0,
+  'Çoban / yeşil salata': 0, 'Etli taze fasulye': 0, 'Zeytinyağlı taze fasulye': 0, 'Türlü': 0, 'Kıymalı ıspanak': 0,
+  'Karnıyarık': 0, 'İmam bayıldı': 0, 'Menemen': 0,
+  'Sebze yemeğindeki pirinç / bulgur (kaşık sayısı)': 100, // kaşık sayısı "gram" yerine girilir: 1 yemek kaşığı = 1 g KHO
+  // Peynir, yağ: 0 g; kuruyemiş / yağlı tohum: 100 g = 10 g
+  'Lor peyniri': 0, 'Tulum peyniri': 0, 'Zeytinyağı / sıvı yağ': 0,
+  'Fındık': 10, 'Ceviz': 10, 'Badem': 10, 'Antep fıstığı': 10, 'Kaju': 10, 'Ay çekirdeği (iç)': 10, 'Fıstık ezmesi': 10, 'Tahin': 10,
+  // Hazır / komplike yemekler
+  'Zeytinyağlı yaprak sarma': x(15, 150), // 7–8 orta boy = 1 sebze + 1 ekmek + 3 yağ = 15 g
+};
+
+const HOSPITAL_PORTIONS: Record<string, Portion[]> = {
+  'Kepekli ekmek': [{ label: '1 ince dilim', grams: 25 }],
+  'Çavdar ekmeği': [{ label: '1 ince dilim', grams: 25 }],
+  'Galeta': [{ label: '1,5 büyük boy', grams: 20 }],
+  'Pirinç pilavı': [{ label: '2 yemek kaşığı dolusu', grams: 50 }, { label: '1 porsiyon', grams: 150 }],
+  'Bulgur pilavı': [{ label: '3 yemek kaşığı dolusu', grams: 75 }, { label: '1 porsiyon', grams: 150 }],
+  'Makarna (haşlanmış)': [{ label: '3 yemek kaşığı dolusu', grams: 50 }, { label: '1 porsiyon', grams: 180 }],
+  'Erişte (haşlanmış)': [{ label: '3 yemek kaşığı dolusu', grams: 50 }, { label: '1 porsiyon', grams: 180 }],
+  'Şehriye çorbası': BOWL,
+  'Pirinç çorbası': BOWL,
+  'Bezelye': [{ label: '3 yemek kaşığı dolusu', grams: 125 }],
+  'Haşlanmış patates': [{ label: '1 küçük boy', grams: 100 }, { label: '1 orta boy', grams: 150 }],
+  'Haşlanmış mısır': [{ label: '1 küçük koçan', grams: 90 }],
+  'Patlamış mısır': [{ label: '3 su bardağı dolusu', grams: 25 }],
+  'Leblebi': [{ label: '1/2 çay bardağı', grams: 25 }, { label: '1 avuç', grams: 30 }],
+  'Mısır gevreği': [{ label: '3 yemek kaşığı', grams: 20 }, { label: '1 kase', grams: 30 }],
+  'Yulaf ezmesi (kuru)': [{ label: '2 yemek kaşığı', grams: 25 }, { label: '1 kase', grams: 40 }],
+  'Yoğurt': [{ label: '1 su bardağı (200 ml)', grams: 200 }, { label: '1 çay bardağı (100 ml)', grams: 100 }, { label: '1 kase', grams: 200 }],
+  'Ayran': [{ label: '1,5 su bardağı (300 ml)', grams: 300 }, { label: '1 su bardağı (200 ml)', grams: 200 }, { label: '1 kutu', grams: 200 }],
+  'Süt': [{ label: '1 su bardağı (200 ml)', grams: 200 }],
+  'Kefir': [{ label: '1 su bardağı (200 ml)', grams: 200 }],
+  'Elma': [{ label: '1 orta boy', grams: 130 }],
+  'Armut': [{ label: '1 küçük boy', grams: 140 }],
+  'Portakal': [{ label: '1 orta boy', grams: 180 }],
+  'Mandalina': [{ label: '2 orta boy', grams: 175 }, { label: '1 orta boy', grams: 87.5 }],
+  'Muz': [{ label: '1 küçük boy', grams: 140 }],
+  'Çilek': [{ label: '18 orta boy', grams: 300 }],
+  'Karpuz': [{ label: '1 dilim (1/8 orta boyun yarısı, kabuksuz)', grams: 220 }],
+  'Kavun': [{ label: '1/8 küçük boy, kabuksuz', grams: 170 }],
+  'Üzüm': [{ label: '25 adet', grams: 100 }],
+  'Şeftali': [{ label: '1 orta boy', grams: 220 }],
+  'Kuru kayısı': [{ label: '25 g (≈ 3 adet)', grams: 25 }],
+  'Kuru incir': [{ label: '25 g (≈ 1 büyük)', grams: 25 }],
+  'Hurma (kuru)': [{ label: '25 g (≈ 2–3 adet)', grams: 25 }],
+  'Portakal suyu': [{ label: '1 çay bardağı (100 ml)', grams: 100 }, { label: '1 su bardağı (200 ml)', grams: 200 }],
+  'Vişne / şeftali nektarı': [{ label: '1 çay bardağı (100 ml)', grams: 100 }, { label: '1 su bardağı (200 ml)', grams: 200 }],
+  'Zeytinyağlı yaprak sarma': [{ label: '7–8 orta boy', grams: 150 }, { label: '1 adet', grams: 20 }],
+  'Simit': [{ label: '1 adet (100 g)', grams: 100 }, { label: '1/2 adet', grams: 50 }, { label: '1/4 adet', grams: 25 }],
+};
+
 const MEAT = new Set(['Izgara köfte', 'Izgara et / tavuk / balık', 'Tavuk sote']);
 
 /** Yumurta ve saf et gerçek bileşimde de 0 g karbonhidrattır (TürKomp 0,00 g) */
@@ -384,9 +474,9 @@ export const FOODS: Food[] = Object.entries(DATA).flatMap(([category, rows]) =>
     name,
     category,
     carbsPer100: ZERO_BASE.has(name) ? 0 : carbsPer100,
-    exPer100: EXCHANGE[name],
+    exPer100: HOSPITAL[name] ?? EXCHANGE[name],
     meat: MEAT.has(name) || undefined,
-    portions: PORTIONS[name] ?? portions,
+    portions: HOSPITAL_PORTIONS[name] ?? PORTIONS[name] ?? portions,
     fatty: flag === 'fatty' || undefined,
     fast: flag === 'fast' || undefined,
   })),
