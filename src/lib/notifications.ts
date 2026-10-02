@@ -66,6 +66,17 @@ export async function cancelNotification(id: string | undefined) {
 
 const BASAL_ID = 'bazal-hatirlatici';
 
+/** Telefonda GERÇEKTEN kurulu olan bazal hatırlatıcısının saati (ayardaki saatle karşılaştırmak için); yoksa undefined */
+export async function scheduledBasal(): Promise<{ hour: number; minute: number } | undefined> {
+  const N = load();
+  if (!N) return undefined;
+  const all = await N.getAllScheduledNotificationsAsync();
+  const t = all.find((n) => n.identifier === BASAL_ID)?.trigger as { hour?: number; minute?: number; dateComponents?: { hour?: number; minute?: number } } | null | undefined;
+  const hour = t?.hour ?? t?.dateComponents?.hour;
+  const minute = t?.minute ?? t?.dateComponents?.minute;
+  return typeof hour === 'number' && typeof minute === 'number' ? { hour, minute } : undefined;
+}
+
 /** Günlük bazal insülin hatırlatıcısını kurar veya kaldırır. Başarılıysa true. */
 export async function syncBasalReminder(enabled: boolean, time: string, name: string): Promise<boolean> {
   const N = load();

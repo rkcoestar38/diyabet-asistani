@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Collapsible } from '@/components/guide';
 import { Linking } from 'react-native';
@@ -6,7 +6,7 @@ import { currentVersion, fetchLatest, useUpdateStore } from '@/lib/update';
 import { InsulinForm, NumField } from '@/components/settings-forms';
 import { Btn, Card, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle, confirm, notify } from '@/components/ui';
 import { useThemePref, type ThemePref } from '@/store/theme';
-import { notificationsSupported, notificationsUnsupportedReason, syncBasalReminder } from '@/lib/notifications';
+import { notificationsSupported, notificationsUnsupportedReason, scheduledBasal, syncBasalReminder } from '@/lib/notifications';
 import { backupNow } from '@/lib/backup';
 import { pickText } from '@/lib/files';
 import { isWeb } from '@/lib/web';
@@ -27,9 +27,21 @@ export default function SettingsScreen() {
   const [basalTime, setBasalTime] = useState(s.basalTime);
   const [basalName, setBasalName] = useState(s.basalName);
 
+  // Telefonda gerçekte kurulu saat: ayardaki saatle uyuşmuyorsa kullanıcı görsün
+  const [sched, setSched] = useState<{ hour: number; minute: number } | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    scheduledBasal().then((r) => alive && setSched(r ?? null));
+    return () => {
+      alive = false;
+    };
+  }, [s.basalReminder, s.basalTime]);
+  const schedText = sched ? `${String(sched.hour).padStart(2, '0')}:${String(sched.minute).padStart(2, '0')}` : undefined;
+
   async function setReminder(enabled: boolean, time = s.basalTime, name = s.basalName) {
     update({ basalReminder: enabled });
     const ok = await syncBasalReminder(enabled, time, name);
+    if (ok) setSched((await scheduledBasal()) ?? null);
     if (enabled && !ok) {
       update({ basalReminder: false });
       notify('Hatırlatıcı kurulamadı', notificationsSupported ? 'Bildirim izni verilmedi veya saat geçersiz.' : notificationsUnsupportedReason);
@@ -87,6 +99,16 @@ export default function SettingsScreen() {
         />
         <Toggle label="Her gün bu saatte hatırlat" value={s.basalReminder} onChange={(v) => setReminder(v, basalTime, basalName)} />
         {!notificationsSupported ? <T variant="small">{notificationsUnsupportedReason}</T> : null}
+        {notificationsSupported && s.basalReminder ? (
+          schedText ? (
+            <T variant="small" color={schedText === s.basalTime ? 'ok' : 'danger'}>
+              Telefonda kurulu hatırlatıcı: her gün {schedText}
+              {schedText === s.basalTime ? '' : ` (ayardaki saat ${s.basalTime}; değiştirip tekrar aç)`}
+            </T>
+          ) : sched === null ? (
+            <T variant="small" color="danger">Telefonda kurulu bir hatırlatıcı bulunamadı; düğmeyi kapatıp tekrar aç.</T>
+          ) : null
+        ) : null}
       </Collapsible>
 
       <Collapsible title="Uyarı eşikleri" icon="warning-outline">

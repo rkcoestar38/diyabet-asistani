@@ -14,7 +14,9 @@ import { useEffect } from 'react';
 import { ToastHost } from '@/components/toast';
 import { Font, useScheme, useTheme } from '@/constants/theme';
 import { useHydrated } from '@/lib/hooks';
+import { syncBasalReminder } from '@/lib/notifications';
 import { requestPersistentStorage } from '@/lib/web';
+import { useSettings } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,6 +35,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
+  }, [ready]);
+
+  // Her açılışta bazal hatırlatıcısını ayarlarla eşitle: telefondaki kayıtlı saat ayarlardan farklıysa (ör. eski bir deneme) düzelir
+  useEffect(() => {
+    if (!ready) return;
+    const { basalReminder, basalTime, basalName } = useSettings.getState().settings;
+    if (basalReminder) syncBasalReminder(true, basalTime, basalName).catch(() => undefined);
   }, [ready]);
 
   // Web: tarayıcıdan verinin otomatik silinmemesini iste
