@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, type Href } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
 import { BackupReminder, InstallHint } from "@/components/web-hints";
@@ -19,7 +19,7 @@ import { mealAt, mealLabel } from "@/logic/meals";
 import { attention, evaluate } from "@/logic/optimizer";
 import { awaitingPost } from "@/logic/postmeal";
 import { activeBlock, parseHHMM } from "@/logic/schedule";
-import { startOfDay } from "@/logic/stats";
+import { computeStats, entriesBetween, startOfDay } from "@/logic/stats";
 import { useLog } from "@/store/log";
 import { useSettings } from "@/store/settings";
 import { toast } from "@/store/toast";
@@ -41,7 +41,7 @@ function ago(min: number) {
   return `${Math.floor(min / 1440)} gün önce`;
 }
 
-/** Büyük, tek işlevli kısayol: ne işe yaradığı yazıyla da anlatılır */
+/** Büyük, tek işlevli kısayol (Stitch "Sea Glass Clinical Calm"): yuvarlak kare ikon kutusu, ince kenarlık */
 function Tile({
   icon,
   title,
@@ -57,19 +57,12 @@ function Tile({
 }) {
   const c = useTheme();
   const scheme = useScheme();
-  const bg =
-    tone === "primary" ? c.primary : tone === "danger" ? c.dangerBg : c.card;
-  const fg =
-    tone === "primary" ? c.onPrimary : tone === "danger" ? c.danger : c.text;
-  const sub = tone === "primary" ? c.onPrimary : c.muted;
-  const iconBg =
-    tone === "primary"
-      ? "rgba(255,255,255,0.2)"
-      : tone === "danger"
-        ? c.card
-        : c.primarySoft;
-  const iconFg =
-    tone === "primary" ? c.onPrimary : tone === "danger" ? c.danger : c.primary;
+  const bg = tone === "primary" ? c.primary : tone === "danger" ? c.dangerBg : c.card;
+  const fg = tone === "primary" ? c.onPrimary : tone === "danger" ? c.danger : c.text;
+  const sub = tone === "primary" ? c.onPrimary : tone === "danger" ? c.danger : c.muted;
+  const iconBg = tone === "primary" ? "rgba(255,255,255,0.2)" : tone === "danger" ? c.danger : c.primarySoft;
+  const iconFg = tone === "primary" ? c.onPrimary : tone === "danger" ? c.onDanger : c.primary;
+  const border = tone === "primary" ? c.primary : tone === "danger" ? "rgba(194,58,46,0.2)" : c.border;
   return (
     <View style={{ flexBasis: "46%", flexGrow: 1 }}>
       <Pressy
@@ -78,35 +71,39 @@ function Tile({
         accessibilityLabel={`${title}. ${hint}`}
         style={[
           elevation(scheme),
+          tone === "primary" && scheme === "light" ? { shadowColor: "#0B7A86", shadowOpacity: 0.22, shadowRadius: 20 } : null,
           {
-            minHeight: 128,
+            minHeight: 148,
+            justifyContent: "space-between",
             borderRadius: Radius.lg,
             padding: Space.md,
-            gap: 6,
+            gap: 10,
             backgroundColor: bg,
-            borderWidth: scheme === "dark" && tone === "normal" ? 1 : 0,
-            borderColor: c.border,
+            borderWidth: 1,
+            borderColor: border,
           },
         ]}
       >
         <View
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
+            width: 44,
+            height: 44,
+            borderRadius: 12,
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: iconBg,
           }}
         >
-          <Ionicons name={icon} size={22} color={iconFg} />
+          <Ionicons name={icon} size={24} color={iconFg} />
         </View>
-        <T variant="h2" style={{ color: fg }}>
-          {title}
-        </T>
-        <T variant="small" style={{ color: sub }}>
-          {hint}
-        </T>
+        <View style={{ gap: 4 }}>
+          <T variant="h2" style={{ color: fg, fontWeight: "800" }}>
+            {title}
+          </T>
+          <T variant="small" style={{ color: sub, fontWeight: "500" }}>
+            {hint}
+          </T>
+        </View>
       </Pressy>
     </View>
   );
@@ -138,6 +135,15 @@ export default function Home() {
       : bgTone === "warn"
         ? "Hedefin üstünde"
         : "Hedef aralıkta";
+
+  // Önceki ölçümle karşılaştırılan eğilim oku (3 saatten eski ölçümle kıyas yapılmaz)
+  const prevBg = lastBg
+    ? [...entries].reverse().find((e) => e !== lastBg && e.bg !== undefined && (e.bgTime ?? e.time) < (lastTime ?? 0) && (lastTime ?? 0) - (e.bgTime ?? e.time) <= 3 * 3600000)
+    : undefined;
+  const delta = lastBg && prevBg ? lastBg.bg! - prevBg.bg! : 0;
+  const trendIcon: IconName = delta >= 20 ? "trending-up" : delta <= -20 ? "trending-down" : "arrow-forward";
+  const dayMs = 86400000;
+  const tir = computeStats(entriesBetween(entries, startOfDay(now) - 13 * dayMs, now + 1), settings.blocks, settings.hypoThreshold);
 
   const today = startOfDay(now);
   const todays = entries.filter((e) => e.time >= today);
@@ -203,36 +209,63 @@ export default function Home() {
       </View>
 
       <Card>
-        <View
-          style={{ flexDirection: "row", alignItems: "center", gap: Space.md }}
-        >
-          <View style={{ flex: 1.2, gap: 2 }}>
-            <T variant="label" style={{ marginBottom: 0 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Space.md }}>
+          <View style={{ flex: 1.3 }}>
+            <T variant="label" style={{ marginBottom: 2, textTransform: "uppercase", letterSpacing: 0.6 }}>
               Son şekerin
             </T>
-            <T variant="big" color={bgTone}>
-              {lastBg ? lastBg.bg : "—"}
-              {lastBg ? <T variant="muted"> mg/dL</T> : null}
-            </T>
-            <T variant="small" color={bgTone === "muted" ? undefined : bgTone}>
-              {lastBg && lastTime !== undefined
-                ? `${ago((now - lastTime) / 60000)} · ${bgNote}`
-                : "Henüz ölçüm kaydetmedin"}
-            </T>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+              <T variant="big" color={bgTone}>
+                {lastBg ? lastBg.bg : "—"}
+              </T>
+              {lastBg ? (
+                <T variant="h2" style={{ fontWeight: "700" }}>
+                  mg/dL
+                </T>
+              ) : null}
+              {lastBg && prevBg ? <Ionicons name={trendIcon} size={24} color={bgTone === "muted" ? c.muted : c[bgTone]} style={{ alignSelf: "center" }} /> : null}
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
+              {lastBg ? <Ionicons name={bgTone === "ok" ? "checkmark-circle" : "alert-circle"} size={16} color={bgTone === "muted" ? c.muted : c[bgTone]} /> : null}
+              <T variant="small" color={bgTone === "muted" ? undefined : bgTone} style={{ fontWeight: "700", flexShrink: 1 }}>
+                {lastBg && lastTime !== undefined ? `${ago((now - lastTime) / 60000)} · ${bgNote}` : "Henüz ölçüm kaydetmedin"}
+              </T>
+            </View>
           </View>
           <View style={{ flex: 1, gap: 8 }}>
-            <View>
+            <View style={{ backgroundColor: c.cardAlt, borderColor: c.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 }}>
               <T variant="small">Aktif insülin</T>
-              <T variant="h2">{fmt(iob)} Ü</T>
+              <T variant="h2" style={{ fontWeight: "800" }}>
+                {fmt(iob)} Ü
+              </T>
             </View>
-            <View>
+            <View style={{ backgroundColor: c.cardAlt, borderColor: c.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 }}>
               <T variant="small">Bugün</T>
-              <T variant="h2">
+              <T variant="h2" style={{ fontWeight: "800" }}>
                 {carbs} g · {fmt(bolus)} Ü
               </T>
             </View>
           </View>
         </View>
+        {tir.readings >= 3 ? (
+          <View style={{ gap: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: Space.sm }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <T variant="small" style={{ fontWeight: "700" }}>
+                Hedef içi süre (son 14 gün)
+              </T>
+              <View style={{ backgroundColor: c.okBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <T variant="small" color="ok" style={{ fontWeight: "800" }}>
+                  %{tir.inRange ?? 0}
+                </T>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", height: 10, borderRadius: 5, overflow: "hidden", backgroundColor: c.border }}>
+              <View style={{ flex: tir.below ?? 0, backgroundColor: c.danger }} />
+              <View style={{ flex: tir.inRange ?? 0, backgroundColor: c.ok }} />
+              <View style={{ flex: tir.above ?? 0, backgroundColor: c.warn }} />
+            </View>
+          </View>
+        ) : null}
       </Card>
 
       {basalDue !== undefined ? (
@@ -327,7 +360,16 @@ export default function Home() {
         </Pressy>
       ) : null}
 
-      <T variant="h2">Ne yapmak istiyorsun?</T>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <T variant="h2" style={{ fontWeight: "800" }}>
+          Ne yapmak istiyorsun?
+        </T>
+        <View style={{ backgroundColor: c.cardAlt, borderColor: c.border, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 }}>
+          <T variant="small" style={{ fontWeight: "700" }}>
+            Hızlı erişim
+          </T>
+        </View>
+      </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Space.md }}>
         <Tile
           tone="primary"

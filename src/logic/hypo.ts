@@ -67,17 +67,17 @@ export function chooseRise(manual: number | undefined, samples: RiseSample[], bl
 }
 
 /** Hızlı karbonhidrat kaynakları: verilen gram için porsiyon (gerçek yaşamda ölçülebilen birimlerle) */
-export function quickCarbOptions(grams: number, tabletG: number): { icon: 'medical' | 'water' | 'cube' | 'nutrition'; text: string }[] {
+export function quickCarbOptions(grams: number, tabletG: number): { icon: 'medical' | 'water' | 'cube' | 'nutrition'; text: string; sub: string }[] {
   const half = (n: number) => {
     const r = Math.round(n * 2) / 2;
     return r % 1 === 0 ? String(r) : `${Math.floor(r)}½`.replace(/^0½$/, '½');
   };
   return [
-    { icon: 'medical', text: `${Math.max(1, Math.round(grams / Math.max(tabletG, 1)))} glukoz tableti (tablet başına ${tabletG} g)` },
-    { icon: 'water', text: `${Math.max(10, Math.round((grams / 0.1) / 10) * 10)} ml meyve suyu (100 ml ≈ 10 g)` },
-    { icon: 'water', text: `${Math.max(10, Math.round((grams / 0.106) / 10) * 10)} ml şekerli kola` },
-    { icon: 'cube', text: `${Math.max(1, Math.round(grams / 4))} kesme şeker (≈ 4 g), suda eritilmiş` },
-    { icon: 'nutrition', text: `${half(grams / 16)} yemek kaşığı bal (≈ 16 g)` },
+    { icon: 'medical', text: `${Math.max(1, Math.round(grams / Math.max(tabletG, 1)))} glukoz tableti`, sub: `Tablet başına ${tabletG} g` },
+    { icon: 'water', text: `${Math.max(10, Math.round(grams / 0.1 / 10) * 10)} ml meyve suyu`, sub: '100 ml ≈ 10 g KH' },
+    { icon: 'water', text: `${Math.max(10, Math.round(grams / 0.106 / 10) * 10)} ml şekerli kola`, sub: 'Normal şekerli (diyet değil)' },
+    { icon: 'cube', text: `${Math.max(1, Math.round(grams / 4))} kesme şeker`, sub: '≈ 4 g / adet, suda eritilmiş' },
+    { icon: 'nutrition', text: `${half(grams / 16)} yemek kaşığı bal`, sub: '≈ 16 g hızlı KH' },
   ];
 }
 

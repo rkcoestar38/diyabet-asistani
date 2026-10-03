@@ -203,6 +203,17 @@ export default function Calculator() {
   return (
     <Screen>
       <UpdateBanner />
+      {/* Hesap türü: ekranın en üstünde, her an görünür */}
+      <Segmented<Mode>
+        options={[
+          { value: 'meal', label: 'Yemek' },
+          { value: 'correction', label: 'Düzeltme' },
+          { value: 'reverse', label: 'Kaç gram?' },
+          { value: 'low', label: 'Şeker düşüyor' },
+        ]}
+        value={mode}
+        onChange={setMode}
+      />
       {/* Durum: su seviyesi = aktif insülin */}
       <>
         <WaterLevel level={Math.min(1, iobNow / Math.max(4, settings.maxBolus / 2))} height={168}>
@@ -481,25 +492,6 @@ export default function Calculator() {
       ) : null}
       {mode === 'low' && bg === undefined ? <Notice level="info" text="Şekerini gir; hedefte kalmak için kaç gram karbonhidrat alman gerektiğini hesaplayayım." /> : null}
 
-      {/* Diğer hesaplar */}
-      <View style={{ gap: Space.sm }}>
-        <T variant="label">{mode === 'meal' ? 'Başka bir şey mi hesaplamak istiyorsun?' : 'Hesap türü'}</T>
-        <View style={styles.chips}>
-          {MODES.map((m) => {
-            const active = m.value === mode;
-            return (
-              <Pressable
-                key={m.value}
-                onPress={() => setMode(m.value)}
-                style={[styles.chip, { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : c.card }]}>
-                <T variant="small" color={active ? 'primary' : 'text'}>
-                  {m.label}
-                </T>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
     </Screen>
   );
 }

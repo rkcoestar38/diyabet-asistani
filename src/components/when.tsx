@@ -25,8 +25,9 @@ export function Chip({ label, onPress, active, icon }: { label: string; onPress:
         gap: 6,
         borderWidth: 1.5,
         borderRadius: Radius.pill,
+        minHeight: 42,
         paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         borderColor: active ? c.primary : c.border,
         backgroundColor: active ? c.primarySoft : c.cardAlt,
       }}>

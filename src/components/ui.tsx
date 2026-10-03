@@ -506,13 +506,13 @@ export function notify(title: string, message: string) {
 }
 
 const textStyles = StyleSheet.create({
-  title: { fontSize: 26, lineHeight: 32, fontFamily: Font.extrabold, letterSpacing: -0.4 },
+  title: { fontSize: 26, lineHeight: 32, fontFamily: Font.bold, letterSpacing: -0.5 },
   h2: { fontSize: 17, lineHeight: 23, fontFamily: Font.bold, letterSpacing: -0.1 },
-  body: { fontSize: 16, lineHeight: 23, fontFamily: Font.regular },
-  muted: { fontSize: 15, lineHeight: 21, fontFamily: Font.regular },
-  small: { fontSize: 13, lineHeight: 18, fontFamily: Font.regular },
+  body: { fontSize: 16, lineHeight: 24, fontFamily: Font.regular },
+  muted: { fontSize: 15, lineHeight: 22, fontFamily: Font.regular },
+  small: { fontSize: 13, lineHeight: 19, fontFamily: Font.regular },
   label: { fontSize: 13, lineHeight: 17, fontFamily: Font.semibold, marginBottom: 6 },
-  big: { fontSize: 56, lineHeight: 62, fontFamily: Font.extrabold, letterSpacing: -1.2, fontVariant: ['tabular-nums'] },
+  big: { fontSize: 56, lineHeight: 62, fontFamily: Font.extrabold, letterSpacing: -2, fontVariant: ['tabular-nums'] },
 });
 
 const styles = StyleSheet.create({
@@ -538,19 +538,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Space.sm,
     borderRadius: Radius.md,
-    paddingVertical: 15,
+    minHeight: 52,
+    paddingVertical: 12,
     paddingHorizontal: Space.lg,
   },
-  btnSmall: { paddingVertical: 9, paddingHorizontal: Space.md },
+  btnSmall: { minHeight: 44, paddingVertical: 9, paddingHorizontal: Space.md },
   btnText: { fontSize: 16, fontFamily: Font.bold, letterSpacing: 0.1 },
   segment: { flexDirection: 'row', borderRadius: Radius.md, padding: 3 },
   segmentPill: { position: 'absolute', top: 3, left: 3, bottom: 3, borderRadius: Radius.md - 3 },
-  segmentItem: { flex: 1, paddingVertical: 10, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  segmentItem: { flex: 1, minHeight: 44, paddingVertical: 10, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
   segmentText: { fontSize: 14, textAlign: 'center' },
   notice: { flexDirection: 'row', gap: Space.sm, padding: Space.md, borderRadius: Radius.md },
   noticeText: { flex: 1, fontSize: 15, lineHeight: 21, fontFamily: Font.medium },
   kv: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, gap: Space.md },
-  stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  stepBtn: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: Space.md, paddingVertical: 6 },
   track: { width: 48, height: 28, borderRadius: 14, justifyContent: 'center', paddingHorizontal: 4 },
   knob: { width: 20, height: 20, borderRadius: 10 },

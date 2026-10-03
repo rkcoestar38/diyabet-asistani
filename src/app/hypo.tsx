@@ -43,16 +43,15 @@ export default function Hypo() {
   const [riseText, setRiseText] = useState<string | undefined>();
   const [tabletText, setTabletText] = useState<string | undefined>();
   const [takenText, setTakenText] = useState('');
-  const [symptomMode, setSymptomMode] = useState(false);
   const fmtRise = (n: number) => String(n).replace('.', ',');
 
   const hasBg = bg !== undefined;
   // Karar: karbonhidrat yalnızca şeker düşükse (veya ölçüm yoksa belirtiye göre) önerilir
   const a = assessHypo(bg, block, iob, cob, settings, choice.rise);
-  const treat = (hasBg && (a.status === 'low' || a.status === 'severe' || a.status === 'falling')) || (!hasBg && symptomMode);
+  const treat = hasBg && (a.status === 'low' || a.status === 'severe' || a.status === 'falling');
   const preventive = a.status === 'falling';
-  const amount = !hasBg ? 15 : a.status === 'falling' ? a.carbs : a.status === 'low' || a.status === 'severe' ? a.plan.carbsNow : 0;
-  const plan = hasBg && (a.status === 'low' || a.status === 'severe') ? a.plan : undefined;
+  const amount = a.status === 'falling' ? a.carbs : a.status === 'low' || a.status === 'severe' ? a.plan.carbsNow : 0;
+  const plan = a.status === 'low' || a.status === 'severe' ? a.plan : undefined;
 
   async function treated() {
     const grams = parseNum(takenText) ?? amount;
@@ -100,45 +99,14 @@ export default function Hypo() {
         <>
           {round > 1 ? <Notice level="danger" text={`Şekerin hâlâ düşük. ${round}. tur: tekrar hızlı karbonhidrat al.`} /> : null}
           <Card>
-            <Field
-              label="Şekerin"
-              suffix="mg/dL"
-              value={bgText}
-              onChangeText={(val) => {
-                setBgText(val);
-                if (val) setSymptomMode(false);
-              }}
-              big
-              keyboard="number"
-              placeholder="—"
-            />
-            {!hasBg && !symptomMode ? (
-              <View style={{ gap: Space.sm, marginTop: Space.xs }}>
-                <T variant="muted">Mümkünse önce ölç. Parmak ucu veya sensör ölçümünü yaz.</T>
-                <Btn
-                  small
-                  variant="secondary"
-                  icon="warning-outline"
-                  title="Ölçemiyorum, hipo belirtim var"
-                  onPress={() => setSymptomMode(true)}
-                />
-              </View>
-            ) : null}
-            {!hasBg && symptomMode ? (
-              <View style={{ gap: Space.sm, marginTop: Space.xs }}>
-                <Notice
-                  level="warn"
-                  text="Ölçüm yapamıyorsan ve titreme, soğuk terleme, çarpıntı gibi belirtilerin varsa beklemeden 15 g hızlı karbonhidrat al. 15 dk sonra mutlaka şekerini ölç."
-                />
-                <Btn small variant="ghost" title="Şeker ölçeceğim" onPress={() => setSymptomMode(false)} />
-              </View>
-            ) : null}
+            <Field label="Şekerin" suffix="mg/dL" value={bgText} onChangeText={setBgText} big keyboard="number" placeholder="—" />
+            {!hasBg ? <T variant="muted">Parmak ucu veya sensör ölçümünü yaz; düşükse ne kadar karbonhidrat alacağını buna göre hesaplarım.</T> : null}
           </Card>
 
-          {a.status === 'severe' || (!hasBg && symptomMode) ? (
+          {a.status === 'severe' ? (
             <Notice
               level="danger"
-              text="Ciddi düşük şeker / Ağır belirti: Bilinç bulanıksa ağızdan bir şey VERİLMEMELİ. Yanındakiler glukagon (enjeksiyon veya burun spreyi) uygulamalı ve 112'yi aramalı."
+              text="Ciddi düşük şeker: Bilinç bulanıksa ağızdan bir şey VERİLMEMELİ. Yanındakiler glukagon (enjeksiyon veya burun spreyi) uygulamalı ve 112'yi aramalı."
             />
           ) : null}
 
@@ -191,10 +159,6 @@ export default function Hypo() {
                 <T variant="muted" style={{ textAlign: 'center' }}>
                   Şekerin {bg} → yaklaşık <T style={{ fontWeight: '700' }}>{plan.expectedBg}</T> mg/dL (hedef {block.target}). 15 dk sonra tekrar ölç.
                 </T>
-              ) : a.status === 'unknown' ? (
-                <T variant="muted" style={{ textAlign: 'center' }}>
-                  Belirti varken ölçmeden standart miktar. 15 dk sonra mutlaka ölç.
-                </T>
               ) : (
                 <T variant="muted" style={{ textAlign: 'center' }}>
                   15 dk sonra tekrar ölç.
@@ -204,9 +168,14 @@ export default function Hypo() {
                 Bunlardan birini al ({amount} g için):
               </T>
               {quickCarbOptions(amount, settings.tabletG).map((o) => (
-                <View key={o.text} style={styles.option}>
-                  <Ionicons name={o.icon} size={18} color={c.danger} />
-                  <T style={{ flex: 1 }}>{o.text}</T>
+                <View key={o.text} style={[styles.option, { backgroundColor: c.cardAlt, borderColor: c.border, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 }]}>
+                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: c.dangerBg, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={o.icon} size={18} color={c.danger} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <T style={{ fontWeight: '700' }}>{o.text}</T>
+                    <T variant="small">{o.sub}</T>
+                  </View>
                 </View>
               ))}
               <T variant="small">Çikolata, bisküvi gibi yağlı yiyecekler şekeri yavaş yükseltir; hipo için uygun değil.</T>

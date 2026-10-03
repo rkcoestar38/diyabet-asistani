@@ -112,8 +112,27 @@ export default function Log() {
       ) : null}
 
       <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="analytics" size={20} color={c.primary} />
+            <T variant="h2" style={{ fontWeight: '800' }}>
+              Glikoz trendi
+            </T>
+          </View>
+          <T variant="small">
+            Hedef: {settings.blocks[0]?.low}–{settings.blocks[0]?.high}
+          </T>
+        </View>
         <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={from} days={span} hypo={settings.hypoThreshold} />
         <StatGrid s={dayStats} perDay={span > 1 ? Math.max(dayStats.days, 1) : undefined} dayCount={span > 1 ? dayStats.days : undefined} />
+        {dayStats.readings > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: dayStats.hypos ? c.dangerBg : c.okBg, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
+            <Ionicons name={dayStats.hypos ? 'alert-circle' : 'shield-checkmark'} size={16} color={dayStats.hypos ? c.danger : c.ok} />
+            <T variant="small" color={dayStats.hypos ? 'danger' : 'ok'} style={{ fontWeight: '700' }}>
+              {dayStats.hypos ? `${dayStats.hypos} hipo olayı` : 'Hipo olayı yok'}
+            </T>
+          </View>
+        ) : null}
       </Card>
 
       <Row>
@@ -123,7 +142,7 @@ export default function Log() {
       <Btn variant="secondary" icon="document-text-outline" title="Doktor raporu (PDF)" onPress={() => router.push('/report' as Href)} />
 
       {span === 1 ? (
-        <Card title="Kayıtlar" icon="list">
+        <Card title="Günün kayıtları" icon="list" right={<T variant="small">{dayEntries.length} giriş</T>}>
           {dayEntries.length === 0 ? (
             <T variant="muted">Bu gün için kayıt yok.</T>
           ) : (

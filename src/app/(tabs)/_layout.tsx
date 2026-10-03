@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, Text, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -52,6 +52,12 @@ export default function TabLayout() {
         headerShadowVisible: false,
         headerTintColor: c.text,
         headerTitleStyle: { fontFamily: Font.extrabold, fontSize: 22, color: c.text },
+        headerTitle: ({ children }: { children: string }) => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.primary }} />
+            <Text style={{ fontFamily: Font.extrabold, fontSize: 22, color: c.text }}>{children}</Text>
+          </View>
+        ),
         headerTitleAlign: 'left',
         sceneStyle: { backgroundColor: c.bg },
         animation: 'shift',
