@@ -2,21 +2,28 @@ import { useEffect } from 'react';
 import { Linking } from 'react-native';
 
 import { Btn, Card, Row, T } from '@/components/ui';
-import { autoCheck, currentVersion, useUpdateStore } from '@/lib/update';
+import { autoCheck, compareVersions, currentVersion, useUpdateStore } from '@/lib/update';
 import { isWeb } from '@/lib/web';
 
-/** Yeni sürüm bulunduysa Hesapla ekranının üstünde görünür; açılışta (6 saatte bir) arka planda kontrol edilir. */
+/** Yeni sürüm bulunduysa anasayfada görünür; açılışta arka planda kontrol edilir. */
 export function UpdateBanner() {
   const available = useUpdateStore((s) => s.available);
   const dismissed = useUpdateStore((s) => s.dismissed);
   const set = useUpdateStore((s) => s.set);
+  const cur = currentVersion();
 
   useEffect(() => {
     // Web sürümü sayfa yenilenince kendiliğinden güncellenir; APK indirme önerilmez
     if (!isWeb) autoCheck();
   }, []);
 
-  if (isWeb || !available || dismissed === available.version) return null;
+  useEffect(() => {
+    if (available && compareVersions(available.version, cur) <= 0) {
+      set({ available: undefined });
+    }
+  }, [available, cur, set]);
+
+  if (isWeb || !available || compareVersions(available.version, cur) <= 0 || dismissed === available.version) return null;
   return (
     <Card title={`Yeni sürüm var: ${available.version}`} icon="cloud-download-outline" tone="soft">
       <T variant="muted">Şu an {currentVersion()} sürümünü kullanıyorsun. Verilerin güncellemeden etkilenmez.</T>

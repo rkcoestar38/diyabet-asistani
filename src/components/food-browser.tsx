@@ -20,7 +20,7 @@ const MINE = 'Benim yemeklerim';
 
 export function FoodBrowser({ picker }: { picker?: boolean }) {
   const c = useTheme();
-  const { customFoods, favorites, meals, cart, toggleFavorite, addToCart, removeFromCart, clearCart, saveMeal, loadMeal, removeMeal, removeCustomFood } =
+  const { customFoods, favorites, meals, cart, toggleFavorite, addToCart, updateCartGrams, removeFromCart, clearCart, saveMeal, loadMeal, removeMeal, removeCustomFood } =
     useFoods();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>(FAV);
@@ -53,18 +53,46 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
         title={`Tabağım: ${total} g karbonhidrat`}
         icon="restaurant"
         right={cart.length ? <Btn small variant="ghost" title="Temizle" onPress={clearCart} /> : null}>
-        <MealChips value={when.meal} auto={when.isAuto} onChange={(m) => setDraft({ meal: m })} />
-        <SameAsBefore meal={when.meal} before={when.doseTime} />
+        {!picker ? (
+          <>
+            <MealChips value={when.meal} auto={when.isAuto} onChange={(m) => setDraft({ meal: m })} />
+            <SameAsBefore meal={when.meal} before={when.doseTime} />
+          </>
+        ) : null}
         {cart.length === 0 ? (
           <T variant="muted">Aşağıdan yemek seç; porsiyon veya gram gir. Toplam, Hesapla ekranına aktarılır.</T>
         ) : (
           <>
             {cart.map((i) => (
               <View key={i.id} style={[styles.cartRow, { borderColor: c.border }]}>
-                <T style={{ flex: 1 }}>
-                  {i.name} <T variant="muted">· {fmt(i.grams, 0)} g</T>
-                </T>
-                <T style={{ fontWeight: '700' }}>{fmt(i.carbs)} g</T>
+                <View style={{ flex: 1 }}>
+                  <T style={{ fontWeight: '600' }}>{i.name}</T>
+                  <T variant="small" color="muted">
+                    {fmt(i.carbs)} g KH
+                  </T>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Pressable
+                    onPress={() => {
+                      if (i.grams <= 10) removeFromCart(i.id);
+                      else updateCartGrams(i.id, Math.max(0, i.grams - 10));
+                    }}
+                    hitSlop={8}
+                    accessibilityLabel={`${i.name} 10 gram azalt`}
+                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="remove" size={16} color={c.text} />
+                  </Pressable>
+                  <T style={{ minWidth: 44, textAlign: 'center', fontWeight: '700' }}>
+                    {fmt(i.grams, 0)} g
+                  </T>
+                  <Pressable
+                    onPress={() => updateCartGrams(i.id, i.grams + 10)}
+                    hitSlop={8}
+                    accessibilityLabel={`${i.name} 10 gram artır`}
+                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="add" size={16} color={c.text} />
+                  </Pressable>
+                </View>
                 <Pressable onPress={() => removeFromCart(i.id)} hitSlop={10} accessibilityLabel={`${i.name} çıkar`}>
                   <Ionicons name="close-circle" size={22} color={c.muted} />
                 </Pressable>
@@ -82,15 +110,22 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
               <Notice level="info" text="Yağlı/proteinli yiyecekler şekeri geç yükseltebilir; 2–3 saat sonra tekrar ölç." />
             ) : null}
             <Row>
-              <Field label="Öğün olarak kaydet" keyboard="text" placeholder="ör. Kahvaltım" value={mealName} onChangeText={setMealName} />
+              <Field
+                label="Bu tabağı sık yenen şablon olarak kaydet"
+                keyboard="text"
+                placeholder="ör. Favori Kahvaltım"
+                value={mealName}
+                onChangeText={setMealName}
+              />
               <Btn
                 small
                 variant="secondary"
                 icon="bookmark-outline"
-                title="Kaydet"
+                title="Şablon olarak kaydet"
                 disabled={!mealName.trim()}
                 onPress={() => {
                   saveMeal(mealName.trim());
+                  toast(`“${mealName.trim()}” şablonu kaydedildi`);
                   setMealName('');
                 }}
               />
@@ -105,7 +140,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
       </Card>
 
       {meals.length > 0 ? (
-        <Card title="Kayıtlı öğünler" icon="bookmark">
+        <Card title="Kayıtlı tabak şablonları" icon="bookmark">
           {meals.map((m) => (
             <View key={m.id} style={[styles.cartRow, { borderColor: c.border }]}>
               <Pressable style={{ flex: 1 }} onPress={() => loadMeal(m.id)}>
@@ -114,8 +149,8 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
                   {cartTotal(m.items)} g · {m.items.map((i) => i.name).join(', ')}
                 </T>
               </Pressable>
-              <Btn small variant="secondary" title="Ekle" onPress={() => loadMeal(m.id)} />
-              <Pressable onPress={() => confirm('Öğünü sil', `"${m.name}" silinsin mi?`, () => removeMeal(m.id), 'Sil')} hitSlop={10}>
+              <Btn small variant="secondary" title="Tabağa koy" onPress={() => loadMeal(m.id)} />
+              <Pressable onPress={() => confirm('Şablonu sil', `"${m.name}" şablonu silinsin mi?`, () => removeMeal(m.id), 'Sil')} hitSlop={10}>
                 <Ionicons name="trash-outline" size={20} color={c.muted} />
               </Pressable>
             </View>

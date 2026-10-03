@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 
-import { Btn, Card, DateField, Field, KV, Notice, Pressy, Row, Screen, T, notify } from '@/components/ui';
+import { Btn, Card, DateField, Field, KV, Notice, Pressy, Row, Screen, T, Toggle, notify } from '@/components/ui';
 import { Radius, useTheme } from '@/constants/theme';
 import { sharePdf, shareText, toCsv } from '@/lib/files';
 import { useNow } from '@/lib/hooks';
 import { parseDateInput, toDateInput } from '@/lib/input';
 import { fmt } from '@/logic/bolus';
-import { buildReportHtml, dayLabel, rangeStats } from '@/logic/report';
+import { DEFAULT_REPORT_SECTIONS, buildReportHtml, dayLabel, rangeStats, type ReportSections } from '@/logic/report';
 import { getDayOffset, startOfDay } from '@/logic/stats';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -24,12 +24,21 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: 'custom', label: 'Tarih seç' },
 ];
 
+const SECTION_OPTIONS: { key: keyof ReportSections; label: string }[] = [
+  { key: 'summary', label: 'Özet istatistikler ve hedef aralık (TIR)' },
+  { key: 'observations', label: 'Dikkat çeken noktalar (Doktor gözlemleri)' },
+  { key: 'meals', label: 'Öğünlere göre özet' },
+  { key: 'ratios', label: 'Kullanılan oranlar ve insülinler' },
+  { key: 'analysis', label: 'Gidişat ve bazal analizi' },
+  { key: 'chart', label: 'Şeker grafiği' },
+  { key: 'dailyLogs', label: 'Detaylı günlük kayıtlar' },
+];
+
 export default function Report() {
   const c = useTheme();
   const now = useNow(60000);
   const entries = useLog((s) => s.entries);
   const settings = useSettings((s) => s.settings);
-  const update = useSettings((s) => s.update);
   const history = useSettings((s) => s.ratioHistory);
   const finishedTests = useTests((s) => s.finished);
   const today = startOfDay(now);
@@ -38,6 +47,7 @@ export default function Report() {
   const [fromText, setFromText] = useState(toDateInput(today - 13 * DAY));
   const [toText, setToText] = useState(toDateInput(today));
   const [name, setName] = useState(settings.patientName ?? '');
+  const [sections, setSections] = useState<ReportSections>(DEFAULT_REPORT_SECTIONS);
   const [busy, setBusy] = useState(false);
 
   const range = useMemo<{ error: string } | { from: number; to: number }>(() => {
@@ -55,6 +65,7 @@ export default function Report() {
   const bad = 'error' in range;
   const inRange = bad ? [] : entries.filter((e) => e.time >= range.from && e.time < range.to);
   const stats = rangeStats(inRange, settings);
+  const hasAnySection = Object.values(sections).some(Boolean);
 
   function pickPreset(p: Preset) {
     setPreset(p);
@@ -64,11 +75,46 @@ export default function Report() {
     setToText(toDateInput(today));
   }
 
+  function selectAllSections() {
+    setSections({
+      summary: true,
+      observations: true,
+      meals: true,
+      ratios: true,
+      analysis: true,
+      chart: true,
+      dailyLogs: true,
+    });
+  }
+
+  function selectSummaryOnly() {
+    setSections({
+      summary: true,
+      observations: false,
+      meals: false,
+      ratios: false,
+      analysis: false,
+      chart: false,
+      dailyLogs: false,
+    });
+  }
+
+  function clearAllSections() {
+    setSections({
+      summary: false,
+      observations: false,
+      meals: false,
+      ratios: false,
+      analysis: false,
+      chart: false,
+      dailyLogs: false,
+    });
+  }
+
   async function exportPdf() {
-    if ('error' in range) return;
+    if ('error' in range || !hasAnySection) return;
     setBusy(true);
     try {
-      update({ patientName: name.trim() || undefined });
       const html = buildReportHtml({
         entries,
         settings: { ...settings, patientName: name.trim() || undefined },
@@ -76,6 +122,7 @@ export default function Report() {
         to: range.to,
         ratioChanges: history,
         basalTests: finishedTests.filter((t) => t.kind === 'basal'),
+        sections,
       });
       const tag = `${toDateInput(range.from).replace(/\./g, '-')}_${toDateInput(range.to - DAY).replace(/\./g, '-')}`;
       await sharePdf(html, `diyabet-raporu-${tag}.pdf`);
@@ -130,7 +177,7 @@ export default function Report() {
       </Card>
 
       {!('error' in range) ? (
-        <Card title="Raporda olacaklar" icon="document-text-outline">
+        <Card title="Dönem özeti" icon="document-text-outline">
           <T variant="muted">
             {dayLabel(range.from, false)}
             {range.to - DAY > range.from ? ` – ${dayLabel(range.to - DAY, false)}` : ''}
@@ -141,16 +188,54 @@ export default function Report() {
           <KV k="Hedef aralıkta" v={stats.inRange !== undefined ? `%${stats.inRange}` : '—'} />
           <KV k="Günlük karbonhidrat (ort.)" v={stats.avgCarbsPerDay !== undefined ? `${stats.avgCarbsPerDay} g` : '—'} />
           <KV k="Günlük toplam insülin (ort.)" v={stats.avgTotalPerDay !== undefined ? `${fmt(stats.avgTotalPerDay)} Ü` : '—'} />
-          <T variant="small">
-            Ayrıca: saat dilimlerine göre karbonhidrat oranın ve düzeltme faktörün, hedef aralığın, insülin adların, şeker grafiği ve her günün ölçüm,
-            yemek ve insülin saatleriyle tam kaydı.
-          </T>
           <Field label="Raporda görünecek ad (isteğe bağlı)" keyboard="text" value={name} onChangeText={setName} />
         </Card>
       ) : null}
 
-      <Btn title={busy ? 'Hazırlanıyor…' : 'PDF raporu paylaş'} icon="share-outline" disabled={busy || bad || inRange.length === 0} onPress={exportPdf} />
+      {!('error' in range) ? (
+        <Card title="Rapora eklenecek bölümler" icon="options-outline">
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end', alignItems: 'center', marginBottom: 4 }}>
+            <Pressy onPress={selectAllSections}>
+              <T variant="small" color="primary" style={{ fontWeight: '600' }}>
+                Tümünü seç
+              </T>
+            </Pressy>
+            <T variant="small" color="muted">
+              ·
+            </T>
+            <Pressy onPress={selectSummaryOnly}>
+              <T variant="small" color="primary" style={{ fontWeight: '600' }}>
+                Sadece özet
+              </T>
+            </Pressy>
+            <T variant="small" color="muted">
+              ·
+            </T>
+            <Pressy onPress={clearAllSections}>
+              <T variant="small" color="muted" style={{ fontWeight: '600' }}>
+                Temizle
+              </T>
+            </Pressy>
+          </View>
+          {SECTION_OPTIONS.map((opt) => (
+            <Toggle
+              key={opt.key}
+              label={opt.label}
+              value={sections[opt.key]}
+              onChange={(val) => setSections((prev) => ({ ...prev, [opt.key]: val }))}
+            />
+          ))}
+        </Card>
+      ) : null}
+
+      <Btn
+        title={busy ? 'Hazırlanıyor…' : 'PDF raporu paylaş'}
+        icon="share-outline"
+        disabled={busy || bad || inRange.length === 0 || !hasAnySection}
+        onPress={exportPdf}
+      />
       {!bad && inRange.length === 0 ? <Notice level="info" text="Seçtiğin aralıkta kayıt yok. Başka bir aralık seç." /> : null}
+      {!bad && inRange.length > 0 && !hasAnySection ? <Notice level="warn" text="Rapora eklenecek en az bir bölüm seçmelisin." /> : null}
       <Btn variant="secondary" icon="grid-outline" title="Excel için CSV paylaş" disabled={bad || inRange.length === 0} onPress={exportCsv} />
       <T variant="small" style={{ textAlign: 'center' }}>
         Paylaşım menüsünden WhatsApp, e-posta ya da yazdır seçebilirsin.

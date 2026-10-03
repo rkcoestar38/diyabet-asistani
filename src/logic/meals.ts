@@ -63,3 +63,47 @@ export function previousMeals(entries: LogEntry[], meal: MealType, starts: Recor
   }
   return out;
 }
+
+/** Öğün başlangıç saatlerindeki format, çakışma ve kronolojik sıralama hatalarını kontrol eder */
+export function mealScheduleProblems(starts: Record<MealType, string>): string[] {
+  const problems: string[] = [];
+  const times: { id: MealType; label: string; min: number }[] = [];
+
+  for (const m of MEALS) {
+    const val = starts[m.id];
+    const minutes = parseHHMM(val);
+    if (Number.isNaN(minutes) || !/^\d{2}:\d{2}$/.test(val)) {
+      problems.push(`${m.label} saati geçersiz (${val ?? ''}); SS:DD formatında olmalı`);
+    } else {
+      times.push({ id: m.id, label: m.label, min: minutes });
+    }
+  }
+
+  // Aynı başlangıç saatine sahip öğünler
+  const seen = new Map<number, string>();
+  for (const t of times) {
+    const existing = seen.get(t.min);
+    if (existing) {
+      problems.push(`"${existing}" ve "${t.label}" aynı saatte (${starts[t.id]}) başlıyor; saatleri farklı olmalı`);
+    } else {
+      seen.set(t.min, t.label);
+    }
+  }
+
+  // Gündüz öğünleri için kronolojik sıra: sabah -> sabahAra -> ogle -> ogleAra -> aksam -> aksamAra
+  const daytimeSequence: MealType[] = ['sabah', 'sabahAra', 'ogle', 'ogleAra', 'aksam', 'aksamAra'];
+  for (let i = 0; i < daytimeSequence.length - 1; i++) {
+    const curId = daytimeSequence[i];
+    const nextId = daytimeSequence[i + 1];
+    const curTime = parseHHMM(starts[curId]);
+    const nextTime = parseHHMM(starts[nextId]);
+    if (!Number.isNaN(curTime) && !Number.isNaN(nextTime) && curTime >= nextTime) {
+      const curMeal = MEALS.find((m) => m.id === curId)!;
+      const nextMeal = MEALS.find((m) => m.id === nextId)!;
+      problems.push(`"${curMeal.label}" (${starts[curId]}), "${nextMeal.label}" (${starts[nextId]}) öğününden önce başlamalı`);
+    }
+  }
+
+  return problems;
+}
+

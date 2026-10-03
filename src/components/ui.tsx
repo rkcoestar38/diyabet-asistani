@@ -49,9 +49,11 @@ export function tap(kind: 'light' | 'success' | 'warning' = 'light') {
   else Haptics.notificationAsync(kind === 'success' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => {});
 }
 
-/** İçeriği aşağıdan hafifçe süzülerek (kademeli) getirir; hareket azaltma açıksa anında gösterir. */
 export function Reveal({ children, index = 0, style }: { children: ReactNode; index?: number; style?: StyleProp<ViewStyle> }) {
   const reduce = useReducedMotion();
+  if (Platform.OS === 'web') {
+    return <View style={style}>{children}</View>;
+  }
   return (
     <Animated.View
       entering={reduce ? undefined : FadeInDown.delay(Math.min(index, 8) * 45).duration(420).easing(EASE_OUT).withInitialValues({ transform: [{ translateY: 14 }] })}

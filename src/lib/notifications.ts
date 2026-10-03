@@ -64,6 +64,27 @@ export async function cancelNotification(id: string | undefined) {
   if (N && id) await N.cancelScheduledNotificationAsync(id);
 }
 
+const POST_MEAL_ID = 'tokluk-hatirlatici';
+
+/** Yemekten 2 saat sonra tokluk şekeri ölçüm hatırlatıcısı kurar */
+export async function schedulePostMealReminder(minutes = 120, mealLabelText?: string): Promise<string | undefined> {
+  const N = load();
+  if (!N || !(await ensurePermission(N))) return undefined;
+  await N.cancelScheduledNotificationAsync(POST_MEAL_ID).catch(() => {});
+  return N.scheduleNotificationAsync({
+    identifier: POST_MEAL_ID,
+    content: {
+      title: 'Tokluk şekeri vakti geldi!',
+      body: `${mealLabelText ? `${mealLabelText} sonrası ` : ''}2 saat doldu. İnsülin ve tabağın dengesini görmek için şekerini ölçelim!`,
+    },
+    trigger: {
+      type: N.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: minutes * 60,
+      channelId: 'hatirlatici',
+    },
+  });
+}
+
 const BASAL_ID = 'bazal-hatirlatici';
 
 /** Telefonda GERÇEKTEN kurulu olan bazal hatırlatıcısının saati (ayardaki saatle karşılaştırmak için); yoksa undefined */

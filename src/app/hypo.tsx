@@ -14,6 +14,7 @@ import { assessHypo, chooseRise, followUpSnack, hypoRiseSamples, quickCarbOption
 import { activeBlock } from '@/logic/schedule';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
+import { toast } from '@/store/toast';
 
 const WAIT_MIN = 15;
 
@@ -42,23 +43,34 @@ export default function Hypo() {
   const [riseText, setRiseText] = useState<string | undefined>();
   const [tabletText, setTabletText] = useState<string | undefined>();
   const [takenText, setTakenText] = useState('');
+  const [symptomMode, setSymptomMode] = useState(false);
   const fmtRise = (n: number) => String(n).replace('.', ',');
 
+  const hasBg = bg !== undefined;
   // Karar: karbonhidrat yalnızca şeker düşükse (veya ölçüm yoksa belirtiye göre) önerilir
   const a = assessHypo(bg, block, iob, cob, settings, choice.rise);
-  const treat = a.status === 'unknown' || a.status === 'low' || a.status === 'severe' || a.status === 'falling';
+  const treat = (hasBg && (a.status === 'low' || a.status === 'severe' || a.status === 'falling')) || (!hasBg && symptomMode);
   const preventive = a.status === 'falling';
-  const amount = a.status === 'unknown' || a.status === 'falling' ? a.carbs : a.status === 'low' || a.status === 'severe' ? a.plan.carbsNow : 0;
-  const plan = a.status === 'low' || a.status === 'severe' ? a.plan : undefined;
+  const amount = !hasBg ? 15 : a.status === 'falling' ? a.carbs : a.status === 'low' || a.status === 'severe' ? a.plan.carbsNow : 0;
+  const plan = hasBg && (a.status === 'low' || a.status === 'severe') ? a.plan : undefined;
 
   async function treated() {
     const grams = parseNum(takenText) ?? amount;
     const time = currentTime();
     // Önleyici miktar hipo atağı sayılmasın: yemek olarak kaydedilir
-    if (preventive) addLog({ time, bg, carbs: grams, note: 'Önleyici karbonhidrat (şeker düşüyordu)' });
-    else addLog({ time, bg, hypoCarbs: grams, note: round > 1 ? `Hipo tedavisi (${round}. tur)` : 'Hipo tedavisi' });
+    const entry = preventive
+      ? addLog({ time, bg, carbs: grams, note: 'Önleyici karbonhidrat (şeker düşüyordu)' })
+      : addLog({ time, bg, hypoCarbs: grams, note: round > 1 ? `Hipo tedavisi (${round}. tur)` : 'Hipo tedavisi' });
     const notifId = await scheduleRecheck(WAIT_MIN);
     setPhase({ kind: 'wait', since: currentTime(), notifId });
+    toast(`${grams} g hızlı karbonhidrat kaydedildi`, {
+      label: 'Geri al',
+      onPress: () => {
+        useLog.getState().remove(entry.id);
+        if (notifId) cancelNotification(notifId);
+        setPhase({ kind: 'treat' });
+      },
+    });
   }
 
   function recheck() {
@@ -88,16 +100,45 @@ export default function Hypo() {
         <>
           {round > 1 ? <Notice level="danger" text={`Şekerin hâlâ düşük. ${round}. tur: tekrar hızlı karbonhidrat al.`} /> : null}
           <Card>
-            <Field label="Şekerin" suffix="mg/dL" value={bgText} onChangeText={setBgText} big keyboard="number" placeholder="—" />
-            {a.status === 'unknown' ? (
-              <T variant="muted">Mümkünse önce ölç. Ölçemiyorsan ve belirtilerin varsa (titreme, terleme, çarpıntı, baş dönmesi) ölçmeden tedavi et.</T>
+            <Field
+              label="Şekerin"
+              suffix="mg/dL"
+              value={bgText}
+              onChangeText={(val) => {
+                setBgText(val);
+                if (val) setSymptomMode(false);
+              }}
+              big
+              keyboard="number"
+              placeholder="—"
+            />
+            {!hasBg && !symptomMode ? (
+              <View style={{ gap: Space.sm, marginTop: Space.xs }}>
+                <T variant="muted">Mümkünse önce ölç. Parmak ucu veya sensör ölçümünü yaz.</T>
+                <Btn
+                  small
+                  variant="secondary"
+                  icon="warning-outline"
+                  title="Ölçemiyorum, hipo belirtim var"
+                  onPress={() => setSymptomMode(true)}
+                />
+              </View>
+            ) : null}
+            {!hasBg && symptomMode ? (
+              <View style={{ gap: Space.sm, marginTop: Space.xs }}>
+                <Notice
+                  level="warn"
+                  text="Ölçüm yapamıyorsan ve titreme, soğuk terleme, çarpıntı gibi belirtilerin varsa beklemeden 15 g hızlı karbonhidrat al. 15 dk sonra mutlaka şekerini ölç."
+                />
+                <Btn small variant="ghost" title="Şeker ölçeceğim" onPress={() => setSymptomMode(false)} />
+              </View>
             ) : null}
           </Card>
 
-          {a.status === 'severe' || a.status === 'unknown' ? (
+          {a.status === 'severe' || (!hasBg && symptomMode) ? (
             <Notice
               level="danger"
-              text="Ciddi düşük şeker: Bilinç bulanıksa ağızdan bir şey VERİLMEMELİ. Yanındakiler glukagon (enjeksiyon veya burun spreyi) uygulamalı ve 112'yi aramalı."
+              text="Ciddi düşük şeker / Ağır belirti: Bilinç bulanıksa ağızdan bir şey VERİLMEMELİ. Yanındakiler glukagon (enjeksiyon veya burun spreyi) uygulamalı ve 112'yi aramalı."
             />
           ) : null}
 

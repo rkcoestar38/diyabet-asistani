@@ -1,10 +1,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, type Href } from "expo-router";
+import { useState } from "react";
 import { View } from "react-native";
 
 import { UpdateBanner } from "@/components/update-banner";
 import { BackupReminder, InstallHint } from "@/components/web-hints";
-import { Card, Pressy, T, Screen, type IconName } from "@/components/ui";
+import { Btn, Card, Pressy, T, Screen, type IconName } from "@/components/ui";
 import {
   Radius,
   Space,
@@ -17,10 +18,11 @@ import { fmt } from "@/logic/bolus";
 import { mealAt, mealLabel } from "@/logic/meals";
 import { attention, evaluate } from "@/logic/optimizer";
 import { awaitingPost } from "@/logic/postmeal";
-import { activeBlock } from "@/logic/schedule";
+import { activeBlock, parseHHMM } from "@/logic/schedule";
 import { startOfDay } from "@/logic/stats";
 import { useLog } from "@/store/log";
 import { useSettings } from "@/store/settings";
+import { toast } from "@/store/toast";
 
 const go = (path: string) => router.navigate(path as Href);
 
@@ -146,11 +148,25 @@ export default function Home() {
   const waiting = awaitingPost(entries, now);
   const advice = attention(evaluate(entries, settings, now), settings, now);
 
+  const [basalLater, setBasalLater] = useState(false);
+  const basalDue = (() => {
+    if (!settings.basalDose || basalLater) return undefined;
+    const m = parseHHMM(settings.basalTime);
+    if (Number.isNaN(m)) return undefined;
+    const d = new Date(now);
+    d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    let expected = d.getTime();
+    if (expected > now) expected -= 86400000;
+    if (now - expected > 14 * 3600000) return undefined;
+    if (entries.some((e) => e.basal && e.time >= expected - 6 * 3600000)) return undefined;
+    return expected;
+  })();
+
   const steps: { done: boolean; text: string; to: string }[] = [
     {
       done: entries.some((e) => e.bg !== undefined),
       text: "İlk şekerini kaydet",
-      to: "/entry",
+      to: "/entry?mode=bg",
     },
     {
       done: entries.some((e) => !!e.carbs),
@@ -218,6 +234,48 @@ export default function Home() {
           </View>
         </View>
       </Card>
+
+      {basalDue !== undefined ? (
+        <Card title="Bazal insülinini vurdun mu?" icon="moon">
+          <T variant="muted">
+            {settings.basalName || "Bazal"} · {fmt(settings.basalDose)} Ü · saat{" "}
+            {settings.basalTime}
+          </T>
+          <View style={{ flexDirection: "row", gap: Space.sm }}>
+            <Btn
+              small
+              variant="ghost"
+              title="Sonra"
+              onPress={() => setBasalLater(true)}
+            />
+            <Btn
+              small
+              variant="secondary"
+              title="Başka saatte"
+              onPress={() =>
+                router.push({ pathname: "/entry", params: { basal: "1" } })
+              }
+              style={{ flexGrow: 1 }}
+            />
+            <Btn
+              small
+              icon="checkmark"
+              title="Vurdum"
+              style={{ flexGrow: 1 }}
+              onPress={() => {
+                const entry = useLog.getState().add({
+                  time: basalDue,
+                  basal: settings.basalDose,
+                });
+                toast(`Bazal ${fmt(settings.basalDose)} Ü kaydedildi`, {
+                  label: "Geri al",
+                  onPress: () => useLog.getState().remove(entry.id),
+                });
+              }}
+            />
+          </View>
+        </Card>
+      ) : null}
 
       {waiting ? (
         <Pressy
@@ -289,7 +347,7 @@ export default function Home() {
           icon="water"
           title="Şeker ölçtüm"
           hint="Sadece değeri kaydet (açlık, tokluk, gece)"
-          onPress={() => go("/entry")}
+          onPress={() => go("/entry?mode=bg")}
         />
         <Tile
           icon="nutrition"
@@ -353,46 +411,6 @@ export default function Home() {
           ))}
         </Card>
       ) : null}
-
-      <T variant="h2">Öğren ve ayarla</T>
-      <Pressy
-        onPress={() => go("/learn")}
-        accessibilityRole="button"
-        style={rowStyle(c)}
-      >
-        <Ionicons name="school" size={22} color={c.primary} />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Oranlarımı öğren</T>
-          <T variant="small">
-            Karbonhidrat oranını ve düzeltme faktörünü kendi verinle bul;
-            karbonhidrat saymayı öğren.
-          </T>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={c.muted} />
-      </Pressy>
-      <Pressy
-        onPress={() => go("/settings")}
-        accessibilityRole="button"
-        style={rowStyle(c)}
-      >
-        <Ionicons name="settings" size={22} color={c.primary} />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Ayarlar</T>
-          <T variant="small">
-            Oranlar, insülin adı, bazal, öğün saatleri, tema ve yedekleme.
-          </T>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={c.muted} />
-      </Pressy>
     </Screen>
   );
 }
-
-const rowStyle = (c: ReturnType<typeof useTheme>) => ({
-  flexDirection: "row" as const,
-  alignItems: "center" as const,
-  gap: Space.md,
-  padding: Space.md,
-  borderRadius: Radius.lg,
-  backgroundColor: c.card,
-});

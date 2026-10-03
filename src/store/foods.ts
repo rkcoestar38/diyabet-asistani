@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { meatRule, type Food } from '@/data/foods-tr';
+import { carbsFor, FOODS, meatRule, type Food } from '@/data/foods-tr';
 import { useSettings } from './settings';
 
 import { storage, uid } from './storage';
@@ -18,7 +18,9 @@ type State = {
   removeCustomFood: (id: string) => void;
   toggleFavorite: (id: string) => void;
   addToCart: (item: Omit<CartItem, 'id'>) => void;
+  updateCartGrams: (id: string, grams: number) => void;
   removeFromCart: (id: string) => void;
+  setCart: (cart: CartItem[]) => void;
   clearCart: () => void;
   saveMeal: (name: string) => void;
   loadMeal: (id: string) => void;
@@ -44,7 +46,23 @@ export const useFoods = create<State>()(
           favorites: st.favorites.includes(id) ? st.favorites.filter((x) => x !== id) : [...st.favorites, id],
         })),
       addToCart: (item) => set((st) => ({ cart: [...st.cart, { ...item, id: uid() }] })),
+      updateCartGrams: (id, grams) => {
+        const safeGrams = Math.max(0, grams);
+        const all = [...get().customFoods, ...FOODS];
+        const method = useSettings.getState().settings.countMethod;
+        set((st) => ({
+          cart: st.cart.map((item) => {
+            if (item.id !== id) return item;
+            const food = all.find((f) => f.id === item.foodId);
+            const carbs = food
+              ? carbsFor(food, safeGrams, method)
+              : Math.round((item.carbs / Math.max(item.grams, 1)) * safeGrams);
+            return { ...item, grams: safeGrams, carbs };
+          }),
+        }));
+      },
       removeFromCart: (id) => set((st) => ({ cart: st.cart.filter((c) => c.id !== id) })),
+      setCart: (cart) => set({ cart }),
       clearCart: () => set({ cart: [] }),
       saveMeal: (name) => {
         const items = get().cart;

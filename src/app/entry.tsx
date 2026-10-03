@@ -1,19 +1,25 @@
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { router, useGlobalSearchParams, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
+import { Collapsible } from '@/components/guide';
 import { Chip, MealChips, wrapRow } from '@/components/when';
 import { Btn, Card, DateField, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle, confirm, parseNum } from '@/components/ui';
-import { Space } from '@/constants/theme';
+import { Radius, Space, useTheme } from '@/constants/theme';
+import { carbsFor, FOODS } from '@/data/foods-tr';
 import { currentTime, useNow } from '@/lib/hooks';
 import { parseDateInput, parseTimeInput, toDateInput, toTimeInput } from '@/lib/input';
+import { cancelNotification, schedulePostMealReminder } from '@/lib/notifications';
 import { BG_MAX, BG_MIN, fmt } from '@/logic/bolus';
 import { mealAt, mealLabel } from '@/logic/meals';
-import { mealBefore, postOf } from '@/logic/postmeal';
+import { mealBefore } from '@/logic/postmeal';
 import type { ExerciseLevel, LogEntry, LogItem, MealType } from '@/logic/types';
 import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
+import { uid } from '@/store/storage';
+import { toast } from '@/store/toast';
 
 const str = (n?: number) => (n === undefined ? '' : String(n).replace('.', ','));
 
@@ -42,11 +48,19 @@ const BG_OFFSETS = [
 ];
 
 export default function Entry() {
-  const params = useLocalSearchParams<{ id?: string; basal?: string; after?: string }>();
+  const c = useTheme();
+  const localParams = useLocalSearchParams<{ id?: string; basal?: string; after?: string; mode?: string }>();
+  const globalParams = useGlobalSearchParams<{ id?: string; basal?: string; after?: string; mode?: string }>();
+  const params = { ...globalParams, ...localParams };
+  const webMode = typeof window !== 'undefined' && window.location?.search
+    ? new URLSearchParams(window.location.search).get('mode') ?? undefined
+    : undefined;
+  const modeVal = (Array.isArray(params.mode) ? params.mode[0] : params.mode) || webMode;
+  const isBgMode = modeVal === 'bg' && !params.id && !params.basal;
+
   const entries = useLog((s) => s.entries);
   const existing = entries.find((e) => e.id === params.id);
   const afterSrc = entries.find((e) => e.id === params.after);
-  const existingPost = existing ? postOf(entries, existing) : undefined;
   const { add, update, remove } = useLog();
   const settings = useSettings((s) => s.settings);
   const cart = useFoods((s) => s.cart);
@@ -67,9 +81,6 @@ export default function Entry() {
   const [meal, setMeal] = useState<MealType | undefined>(existing?.meal ?? afterSrc?.meal);
   // Tokluk (yemekten sonra) ölçümü mü? Yemek kaydının "Tokluk ekle" düğmesinden açılınca otomatik işaretli
   const [post, setPost] = useState(existing?.post ?? !!afterSrc);
-  // Yemekle birlikte girilen tokluk şekeri ve yemekten kaç dakika sonra ölçüldüğü
-  const [postBg, setPostBg] = useState(str(existingPost?.bg));
-  const [postDelay, setPostDelay] = useState(existing && existingPost ? Math.round((existingPost.time - existing.time) / 60000) : 120);
   const [bg, setBg] = useState(str(existing?.bg));
   // Boş = yemek/kayıt zamanıyla aynı anda ölçüldü
   const [bgTimeText, setBgTimeText] = useState(existing?.bgTime ? toTimeInput(existing.bgTime) : '');
@@ -77,8 +88,6 @@ export default function Entry() {
   const [items, setItems] = useState<LogItem[] | undefined>(existing?.items);
   const [bolus, setBolus] = useState(str(existing?.bolus));
   const [basal, setBasal] = useState(str(existing?.basal ?? (params.basal && settings.basalDose ? settings.basalDose : undefined)));
-  const [hypoCarbs, setHypoCarbs] = useState(str(existing?.hypoCarbs));
-  const [ketones, setKetones] = useState(str(existing?.ketones));
   const [exercise, setExercise] = useState<ExerciseLevel>(existing?.exercise ?? 'none');
   const [note, setNote] = useState(existing?.note ?? '');
 
@@ -87,6 +96,12 @@ export default function Entry() {
   const ts = untouched ? now : parseDateTime(date, time);
   const autoMeal = ts !== undefined ? mealAt(ts, settings.mealStarts) : 'sabah';
   const mealValue = meal ?? autoMeal;
+
+  // Bazal saat penceresi: 20:30 (1230 dk) ile 02:00 (120 dk) arası veya doğrudan parametre ile açılmışsa
+  const entryDate = new Date(ts ?? now);
+  const entryMinutes = entryDate.getHours() * 60 + entryDate.getMinutes();
+  const isBasalWindow = entryMinutes >= 20 * 60 + 30 || entryMinutes < 2 * 60;
+  const showBasal = params.basal === '1' || isBasalWindow;
 
   // Şeker ölçüm zamanı: aynı gün, kayıt zamanından önce (gece yarısını aşarsa bir önceki gün)
   let bgTime: number | undefined;
@@ -105,8 +120,6 @@ export default function Entry() {
     carbs: parseNum(carbs),
     bolus: parseNum(bolus),
     basal: parseNum(basal),
-    hypoCarbs: parseNum(hypoCarbs),
-    ketones: parseNum(ketones),
   };
   const errors: string[] = [];
   if (ts === undefined) errors.push('Tarih ve saati tam yaz.');
@@ -116,11 +129,10 @@ export default function Entry() {
   if (values.carbs !== undefined && !(values.carbs >= 0 && values.carbs <= 400)) errors.push('Karbonhidrat geçersiz.');
   if (values.bolus !== undefined && !(values.bolus >= 0 && values.bolus <= 100)) errors.push('Hızlı insülin geçersiz.');
   if (values.basal !== undefined && !(values.basal >= 0 && values.basal <= 200)) errors.push('Bazal geçersiz.');
-  const postValue = post ? undefined : parseNum(postBg);
-  const postTime = ts !== undefined ? ts + postDelay * 60000 : undefined;
-  if (postValue !== undefined && !(postValue >= BG_MIN && postValue <= BG_MAX)) errors.push(`Tokluk şekeri ${BG_MIN}–${BG_MAX} arasında olmalı.`);
-  if (postValue !== undefined && postTime !== undefined && postTime > now + 5 * 60000) errors.push('Tokluk ölçümünün saati henüz gelmedi. Ölçünce Günlük’teki “Tokluk ekle” ile girebilirsin; şimdilik bu alanı boş bırak.');
-  const empty = Object.values(values).every((v) => v === undefined) && !note.trim() && exercise === 'none';
+
+  const empty = isBgMode
+    ? values.bg === undefined
+    : Object.values(values).every((v) => v === undefined) && !note.trim() && exercise === 'none';
 
   const cartCarbs = cartTotal(cart);
   const applyCart = () => {
@@ -131,8 +143,7 @@ export default function Entry() {
     ]);
     setCarbs(String(cartCarbs));
   };
-  // Tabaktaki yemekler değişince (veya ekran tabakla açılınca) kayda kendiliğinden aktarılır; onay gerekmez.
-  // Var olan kayıt düzenlenirken, kayıtlı yemekler yalnızca yeni yemek seçilirse değişir.
+  // Tabaktaki yemekler değişince (veya ekran tabakla açılınca) kayda aktarılır
   const cartSig = cart.map((i) => i.id).join(',');
   const [seenSig, setSeenSig] = useState(existing ? cartSig : '');
   if (cartSig !== seenSig) {
@@ -141,13 +152,57 @@ export default function Entry() {
   }
   const itemsTotal = items ? Math.round(items.reduce((s, i) => s + i.carbs, 0)) : 0;
 
+  function updateItemGrams(foodId: string, deltaOrGrams: number, isDelta = false) {
+    if (!items) return;
+    const allFoods = [...useFoods.getState().customFoods, ...FOODS];
+    const method = settings.countMethod;
+    const updated = items
+      .map((it) => {
+        if (it.foodId !== foodId) return it;
+        const newGrams = isDelta ? Math.max(0, it.grams + deltaOrGrams) : Math.max(0, deltaOrGrams);
+        if (newGrams === 0) return null;
+        const f = allFoods.find((food) => food.id === it.foodId);
+        const c = f ? carbsFor(f, newGrams, method) : Math.round((it.carbs / Math.max(it.grams, 1)) * newGrams);
+        return { ...it, grams: newGrams, carbs: c };
+      })
+      .filter((it): it is LogItem => it !== null);
+
+    setItems(updated.length ? updated : undefined);
+    const totalC = updated.length ? Math.round(updated.reduce((s, it) => s + it.carbs, 0)) : 0;
+    setCarbs(totalC > 0 ? String(totalC) : '');
+  }
+
+  function removeItem(foodId: string) {
+    if (!items) return;
+    const updated = items.filter((it) => it.foodId !== foodId);
+    setItems(updated.length ? updated : undefined);
+    const totalC = updated.length ? Math.round(updated.reduce((s, it) => s + it.carbs, 0)) : 0;
+    setCarbs(totalC > 0 ? String(totalC) : '');
+  }
+
+  function openFoodPicker() {
+    if (items?.length) {
+      useFoods.getState().setCart(
+        items.filter((i) => i.foodId !== 'rule-meat').map((i) => ({
+          id: uid(),
+          foodId: i.foodId,
+          name: i.name,
+          grams: i.grams,
+          carbs: i.carbs,
+          fatty: i.fatty,
+        }))
+      );
+    }
+    router.push('/pick-foods' as Href);
+  }
+
   function save() {
     const savedAt = untouched ? currentTime() : ts!;
     const entry: Omit<LogEntry, 'id'> = {
       time: savedAt,
       bgTime: values.bg !== undefined ? bgTime : undefined,
       meal: mealValue,
-      ...Object.fromEntries(Object.entries(values).filter(([k, v]) => v !== undefined && (k === 'ketones' || v !== 0))),
+      ...Object.fromEntries(Object.entries(values).filter(([_, v]) => v !== undefined && v !== 0)),
       items: items?.length ? items : undefined,
       foods: items?.length ? items.map((i) => `${i.name} ${fmt(i.grams, 0)} g`).join(', ') : undefined,
       exercise: exercise === 'none' ? undefined : exercise,
@@ -156,7 +211,8 @@ export default function Entry() {
     // Tokluk ölçümü kendi başına girildiyse hangi yemeğe ait olduğunu bul
     const owner = post ? (afterSrc ?? mealBefore(entries, bgTime ?? savedAt, existing?.id)) : undefined;
     const postFields = post ? { post: true, afterId: owner?.id } : { post: undefined, afterId: undefined };
-    let mainId = existing?.id;
+
+    let savedId: string | undefined;
     if (existing) {
       // Elle düzenlemede doz bileşenleri artık geçerli olmayabilir
       const changedDose = entry.bolus !== existing.bolus || entry.carbs !== existing.carbs || entry.bg !== existing.bg;
@@ -167,25 +223,133 @@ export default function Entry() {
         ...entry,
         ...postFields,
       });
+      savedId = existing.id;
     } else {
-      mainId = add({ ...entry, ...(post ? postFields : {}) }).id;
+      const created = add({ ...entry, ...(post ? postFields : {}) });
+      savedId = created.id;
     }
-    if (!post && mainId) {
-      if (postValue !== undefined && postTime !== undefined) {
-        const fields = { time: postTime, bg: postValue, meal: mealValue, post: true, afterId: mainId };
-        if (existingPost) update(existingPost.id, { ...fields, bgTime: undefined });
-        else add(fields);
-      } else if (existingPost) {
-        remove(existingPost.id);
-      }
+
+    if (post) {
+      cancelNotification('tokluk-hatirlatici').catch(() => {});
+    } else if (values.carbs !== undefined || (items && items.length > 0)) {
+      schedulePostMealReminder(120, mealLabel(mealValue)).catch(() => {});
     }
+
     if (items && cart.length) clearCart();
     router.back();
+
+    if (!existing && savedId) {
+      const idToUndo = savedId;
+      toast(values.bg !== undefined && isBgMode ? `Şeker ${values.bg} mg/dL kaydedildi` : 'Kayıt kaydedildi', {
+        label: 'Geri al',
+        onPress: () => remove(idToUndo),
+      });
+    }
+  }
+
+  if (isBgMode) {
+    return (
+      <Screen>
+        <Card title="Şeker Ölçümü" icon="water">
+          <View style={{ gap: 8 }}>
+            <T variant="label" style={{ marginBottom: 0 }}>
+              Ne zaman?
+            </T>
+            <View style={wrapRow}>
+              {OFFSETS.map((o) => (
+                <Chip
+                  key={o.label}
+                  label={o.label}
+                  active={o.minutes === 0 && untouched}
+                  onPress={() => setWhen(o.minutes === 0 ? undefined : now - o.minutes * 60000)}
+                />
+              ))}
+              <Chip label="Bugün" onPress={() => { setDate(toDateInput(now)); setTime(time); }} active={date === toDateInput(now)} />
+              <Chip label="Dün" onPress={() => { setDate(toDateInput(now - 86400000)); setTime(time); }} active={date === toDateInput(now - 86400000)} />
+            </View>
+          </View>
+          <Row>
+            <DateField label="Tarih" value={date} onChange={setDate} />
+            <TimeField label="Saat" value={time} onChange={setTime} />
+          </Row>
+
+          <View style={{ gap: 6 }}>
+            <T variant="label" style={{ marginBottom: 0 }}>
+              Hangi öğün?
+            </T>
+            <MealChips value={mealValue} auto={meal === undefined} onChange={setMeal} />
+          </View>
+
+          <View style={{ gap: 6 }}>
+            <T variant="label" style={{ marginBottom: 0 }}>
+              Ölçüm durumu
+            </T>
+            <Segmented
+              options={[
+                { value: 'pre', label: 'Açlık / Yemek öncesi' },
+                { value: 'post', label: 'Tokluk (yemek sonrası)' },
+              ]}
+              value={post ? 'post' : 'pre'}
+              onChange={(v) => setPost(v === 'post')}
+            />
+          </View>
+
+          <Row>
+            <Field label="Şeker" suffix="mg/dL" value={bg} onChangeText={setBg} big keyboard="number" placeholder="—" />
+            <TimeField label="Ölçüm saati" value={bgTimeText} onChange={setBgTimeText} />
+          </Row>
+          {values.bg !== undefined ? (
+            <View style={wrapRow}>
+              {BG_OFFSETS.map((o) => (
+                <Chip
+                  key={o.label}
+                  label={o.label}
+                  active={o.minutes === 0 ? bgTimeText === '' : ts !== undefined && bgTimeText === toTimeInput(ts - o.minutes * 60000)}
+                  onPress={() => setBgTimeText(o.minutes === 0 || ts === undefined ? '' : toTimeInput(ts - o.minutes * 60000))}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          <Field label="Not (isteğe bağlı)" keyboard="text" value={note} onChangeText={setNote} placeholder="ör. egzersiz öncesi, baş ağrısı" />
+        </Card>
+
+        <Collapsible title="Yemek veya insülin bilgisi ekle" icon="options-outline">
+          <Row>
+            <Field label="Karbonhidrat" suffix="g" value={carbs} onChangeText={setCarbs} step={5} />
+          </Row>
+          <Row>
+            <Field label={settings.rapidName ? `Hızlı insülin (${settings.rapidName})` : 'Hızlı insülin'} suffix="Ü" value={bolus} onChangeText={setBolus} step={0.5} />
+            {showBasal ? (
+              <Field label={`Bazal${settings.basalName ? ` (${settings.basalName})` : ''}`} suffix="Ü" value={basal} onChangeText={setBasal} step={1} />
+            ) : null}
+          </Row>
+          <View style={{ gap: Space.xs }}>
+            <T variant="label">Egzersiz</T>
+            <Segmented<ExerciseLevel>
+              options={[
+                { value: 'none', label: 'Yok' },
+                { value: 'light', label: 'Hafif' },
+                { value: 'moderate', label: 'Orta' },
+                { value: 'intense', label: 'Yoğun' },
+              ]}
+              value={exercise}
+              onChange={setExercise}
+            />
+          </View>
+        </Collapsible>
+
+        {errors.map((e) => (
+          <Notice key={e} level="danger" text={e} />
+        ))}
+        <Btn title="Şekeri Kaydet" icon="checkmark" disabled={errors.length > 0 || empty} onPress={save} />
+      </Screen>
+    );
   }
 
   return (
     <Screen>
-      <Card>
+      <Card title={existing ? 'Kaydı Düzenle' : 'Yeni Kayıt'} icon="create-outline">
         <View style={{ gap: 8 }}>
           <T variant="label" style={{ marginBottom: 0 }}>
             Ne zaman?
@@ -209,11 +373,13 @@ export default function Entry() {
           </T>
           <MealChips value={mealValue} auto={meal === undefined} onChange={setMeal} />
         </View>
-        <Toggle label="Tokluk şekeri (yemekten sonra ölçtüm)" value={post} onChange={setPost} />
+        <Toggle label="Tokluk şekeri (yemekten sonra ölçüldü)" value={post} onChange={setPost} />
         {post && afterSrc ? (
           <Notice level="info" text={`${mealLabel(afterSrc.meal ?? mealAt(afterSrc.time, settings.mealStarts))} yemeğinin tokluk şekeri olarak kaydedilecek.`} />
         ) : null}
+      </Card>
 
+      <Card title="Şeker Ölçümü" icon="water-outline">
         <Row>
           <Field label="Şeker" suffix="mg/dL" value={bg} onChangeText={setBg} keyboard="number" />
           <TimeField label="Ölçüm saati" value={bgTimeText} onChange={setBgTimeText} />
@@ -230,47 +396,75 @@ export default function Entry() {
             ))}
           </View>
         ) : null}
+      </Card>
 
-        {!post ? (
-          <View style={{ gap: 6 }}>
-            <Row>
-              <Field label="Tokluk şekeri (isteğe bağlı)" suffix="mg/dL" value={postBg} onChangeText={setPostBg} keyboard="number" />
-            </Row>
-            {postBg !== '' ? (
-              <View style={wrapRow}>
-                {[60, 120, 180].map((m) => (
-                  <Chip key={m} label={`${m / 60} saat sonra`} active={postDelay === m} onPress={() => setPostDelay(m)} />
-                ))}
-              </View>
-            ) : (
-              <T variant="small">Açlık ve tokluğu birlikte girmek için: açlık şekerini yukarıya, yemekten sonraki ölçümü buraya yaz.</T>
-            )}
-          </View>
-        ) : null}
+      <Card title="Yemek ve İnsülin" icon="restaurant-outline">
         <Row>
           <Field label="Karbonhidrat" suffix="g" value={carbs} onChangeText={setCarbs} step={5} />
         </Row>
         {items?.length ? (
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: 8 }}>
             <T variant="small" style={{ fontWeight: '600' }}>
-              Seçilen yemekler ({itemsTotal} g)
+              Seçilen yemekler ({itemsTotal} g KH)
             </T>
-            <T variant="small">{items.map((i) => `${i.name} ${fmt(i.grams, 0)} g`).join(', ')}</T>
+            {items.map((i) => (
+              <View
+                key={i.foodId}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: Radius.md,
+                  backgroundColor: c.cardAlt,
+                  gap: 8,
+                }}>
+                <View style={{ flex: 1 }}>
+                  <T style={{ fontWeight: '600' }}>{i.name}</T>
+                  <T variant="small" color="muted">
+                    {fmt(i.carbs)} g KH
+                  </T>
+                </View>
+                {i.foodId !== 'rule-meat' ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Pressable
+                      onPress={() => updateItemGrams(i.foodId, -10, true)}
+                      hitSlop={6}
+                      accessibilityLabel={`${i.name} 10 gram azalt`}
+                      style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="remove" size={14} color={c.text} />
+                    </Pressable>
+                    <T style={{ minWidth: 42, textAlign: 'center', fontWeight: '700' }}>{fmt(i.grams, 0)} g</T>
+                    <Pressable
+                      onPress={() => updateItemGrams(i.foodId, 10, true)}
+                      hitSlop={6}
+                      accessibilityLabel={`${i.name} 10 gram artır`}
+                      style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={14} color={c.text} />
+                    </Pressable>
+                  </View>
+                ) : null}
+                <Pressable onPress={() => removeItem(i.foodId)} hitSlop={8} accessibilityLabel={`${i.name} sil`}>
+                  <Ionicons name="close-circle" size={20} color={c.muted} />
+                </Pressable>
+              </View>
+            ))}
           </View>
         ) : null}
         <Row>
-          <Btn small variant="secondary" icon="list" title={items?.length ? 'Yemekleri değiştir' : 'Yemek listesinden seç'} onPress={() => router.push('/pick-foods' as Href)} style={{ flexGrow: 1 }} />
-          {items?.length ? <Btn small variant="ghost" icon="close" title="Temizle" onPress={() => setItems(undefined)} /> : null}
+          <Btn small variant="secondary" icon="list" title={items?.length ? 'Yemek ekle / değiştir' : 'Yemek listesinden seç'} onPress={openFoodPicker} style={{ flexGrow: 1 }} />
+          {items?.length ? <Btn small variant="ghost" icon="close" title="Temizle" onPress={() => { setItems(undefined); setCarbs(''); }} /> : null}
         </Row>
 
         <Row>
           <Field label={settings.rapidName ? `Hızlı insülin (${settings.rapidName})` : 'Hızlı insülin'} suffix="Ü" value={bolus} onChangeText={setBolus} step={0.5} />
-          <Field label={`Bazal${settings.basalName ? ` (${settings.basalName})` : ''}`} suffix="Ü" value={basal} onChangeText={setBasal} step={1} />
+          {showBasal ? (
+            <Field label={`Bazal${settings.basalName ? ` (${settings.basalName})` : ''}`} suffix="Ü" value={basal} onChangeText={setBasal} step={1} />
+          ) : null}
         </Row>
-        <Row>
-          <Field label="Hipo için alınan KH" suffix="g" value={hypoCarbs} onChangeText={setHypoCarbs} step={5} base={10} />
-          <Field label="Kan ketonu" suffix="mmol/L" value={ketones} onChangeText={setKetones} />
-        </Row>
+      </Card>
+
+      <Card title="Ek Detaylar" icon="document-text-outline">
         <View style={{ gap: Space.xs }}>
           <T variant="label">Egzersiz</T>
           <Segmented<ExerciseLevel>
@@ -285,30 +479,26 @@ export default function Entry() {
           />
         </View>
         <Field label="Not" keyboard="text" value={note} onChangeText={setNote} placeholder="ör. hastaydım, stresliydim, adet dönemi" />
-        {values.ketones !== undefined && values.ketones >= 1.5 ? (
-          <Notice level="danger" text="Kan ketonu 1,5 mmol/L ve üzeri: doktorunu ara veya acile başvur. 3,0 üzeri acil durumdur." />
-        ) : values.ketones !== undefined && values.ketones >= 0.6 ? (
-          <Notice level="warn" text="Keton hafif yüksek (0,6–1,5). Bol su iç, düzeltme dozunu yap, 2 saat sonra şeker ve keton tekrar ölç." />
-        ) : null}
-        {errors.map((e) => (
-          <Notice key={e} level="danger" text={e} />
-        ))}
-        <Btn title="Kaydet" icon="checkmark" disabled={errors.length > 0 || empty} onPress={save} />
-        {existing ? (
-          <Btn
-            variant="ghost"
-            icon="trash-outline"
-            title="Kaydı sil"
-            onPress={() =>
-              confirm('Kaydı sil', 'Bu kayıt silinsin mi?', () => {
-                entries.filter((x) => x.afterId === existing.id).forEach((x) => remove(x.id));
-                remove(existing.id);
-                router.back();
-              }, 'Sil')
-            }
-          />
-        ) : null}
       </Card>
+
+      {errors.map((e) => (
+        <Notice key={e} level="danger" text={e} />
+      ))}
+      <Btn title="Kaydet" icon="checkmark" disabled={errors.length > 0 || empty} onPress={save} />
+      {existing ? (
+        <Btn
+          variant="ghost"
+          icon="trash-outline"
+          title="Kaydı sil"
+          onPress={() =>
+            confirm('Kaydı sil', 'Bu kayıt silinsin mi?', () => {
+              entries.filter((x) => x.afterId === existing.id).forEach((x) => remove(x.id));
+              remove(existing.id);
+              router.back();
+            }, 'Sil')
+          }
+        />
+      ) : null}
     </Screen>
   );
 }

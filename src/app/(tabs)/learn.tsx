@@ -6,7 +6,7 @@ import { Choice, Collapsible, Steps } from '@/components/guide';
 import { LabelCalculator } from '@/components/label-calc';
 import { RatioTrend, SuggestionView } from '@/components/ratio-trend';
 import { EstimateForm, RatioEditor, useApplyEstimate } from '@/components/settings-forms';
-import { Card, KV, Notice, Screen, Segmented, T, confirm, notify } from '@/components/ui';
+import { Card, KV, Notice, Screen, T, confirm, notify } from '@/components/ui';
 import { Space } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
@@ -16,44 +16,66 @@ import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
 import { useTests } from '@/store/tests';
 
-type Tab = 'find' | 'carbs' | 'mine';
-
 export default function Learn() {
   const params = useLocalSearchParams<{ tab?: string }>();
-  const valid = (t?: string): t is Tab => t === 'find' || t === 'carbs' || t === 'mine';
-  const [tab, setTab] = useState<Tab>(valid(params.tab) ? params.tab : 'find');
-  // Ana sayfadaki kartlar gibi dışarıdan gelen ?tab= isteği, ekran zaten açıkken de uygulanır
-  const [seen, setSeen] = useState(params.tab);
-  if (params.tab !== seen) {
-    setSeen(params.tab);
-    if (valid(params.tab)) setTab(params.tab);
+  const [openFind, setOpenFind] = useState(params.tab === 'find');
+  const [openCarbs, setOpenCarbs] = useState(params.tab === 'carbs');
+  const [openMine, setOpenMine] = useState(params.tab === 'mine');
+
+  const [seenTab, setSeenTab] = useState(params.tab);
+  if (params.tab !== seenTab) {
+    setSeenTab(params.tab);
+    if (params.tab === 'find') setOpenFind(true);
+    if (params.tab === 'carbs') setOpenCarbs(true);
+    if (params.tab === 'mine') setOpenMine(true);
   }
+
   return (
     <Screen>
-      <Segmented<Tab>
-        options={[
-          { value: 'find', label: 'Oranlarımı bul' },
-          { value: 'carbs', label: 'KH saymayı öğren' },
-          { value: 'mine', label: 'Oranlarım' },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === 'find' ? <Find /> : null}
-      {tab === 'carbs' ? <CarbGuide /> : null}
-      {tab === 'mine' ? <Mine /> : null}
+      <SuggestionsSection />
+
+      <Collapsible title="Oranlarımı bul" icon="compass" open={openFind} onToggle={setOpenFind}>
+        <Find />
+      </Collapsible>
+
+      <Collapsible title="KH saymayı öğren" icon="nutrition" open={openCarbs} onToggle={setOpenCarbs}>
+        <CarbGuide />
+      </Collapsible>
+
+      <Collapsible title="Oranlarım" icon="options" open={openMine} onToggle={setOpenMine}>
+        <Mine />
+      </Collapsible>
     </Screen>
+  );
+}
+
+function SuggestionsSection() {
+  const settings = useSettings((s) => s.settings);
+  const entries = useLog((s) => s.entries);
+  const profile = { dia: settings.dia, peak: settings.peak };
+  const icr = analyzeIcr(entries, settings.blocks, profile);
+  const isf = analyzeIsf(entries, settings.blocks, profile);
+  const blocks = sortBlocks(settings.blocks);
+
+  return (
+    <Card title="Öneriler" icon="bulb-outline">
+      <T variant="muted">Kayıtlarına ve testlerine göre hesaplanan oran önerileri:</T>
+      {blocks.map((b) => (
+        <View key={b.id} style={{ gap: Space.sm, marginTop: Space.xs }}>
+          {settings.blocks.length > 1 ? (
+            <T style={{ fontWeight: '700' }}>{`${b.name} (${b.start}–${blockEnd(settings.blocks, b)})`}</T>
+          ) : null}
+          <SuggestionView kind="icr" s={icr.find((x) => x.blockId === b.id)!} blockId={b.id} />
+          <SuggestionView kind="isf" s={isf.find((x) => x.blockId === b.id)!} blockId={b.id} />
+        </View>
+      ))}
+    </Card>
   );
 }
 
 function Find() {
   const settings = useSettings((s) => s.settings);
-  const entries = useLog((s) => s.entries);
   const active = useTests((s) => s.active);
-  const profile = { dia: settings.dia, peak: settings.peak };
-  const icr = analyzeIcr(entries, settings.blocks, profile);
-  const isf = analyzeIsf(entries, settings.blocks, profile);
-  const blocks = sortBlocks(settings.blocks);
 
   return (
     <>
@@ -87,14 +109,6 @@ function Find() {
         <T variant="muted">Günlük insülin dozlarından kaba bir başlangıç oranı çıkarır.</T>
         <StartEstimate />
       </Collapsible>
-
-      <T variant="h2">Öneriler</T>
-      {blocks.map((b) => (
-        <Card key={b.id} title={settings.blocks.length > 1 ? `${b.name} · ${b.start}–${blockEnd(settings.blocks, b)}` : 'Tüm gün'} icon="time-outline">
-          <SuggestionView kind="icr" s={icr.find((x) => x.blockId === b.id)!} blockId={b.id} />
-          <SuggestionView kind="isf" s={isf.find((x) => x.blockId === b.id)!} blockId={b.id} />
-        </Card>
-      ))}
     </>
   );
 }

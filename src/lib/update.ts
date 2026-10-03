@@ -36,7 +36,8 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export const currentVersion = (): string => Constants.expoConfig?.version ?? '0.0.0';
+export const currentVersion = (): string =>
+  Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.4';
 
 type Release = { tag_name?: string; html_url?: string; body?: string; draft?: boolean; prerelease?: boolean; assets?: { name: string; browser_download_url: string }[] };
 
@@ -78,14 +79,21 @@ export const useUpdateStore = create<State>()(
   }),
 );
 
-const SIX_HOURS = 6 * 3600000;
+const THIRTY_MINUTES = 30 * 60000;
 
-/** Açılışta (en fazla 6 saatte bir) sessizce yeni sürüm arar. Hata olursa sessizce geçer. */
-export async function autoCheck(now = Date.now()) {
+/** Açılışta (en fazla 30 dakikada bir) sessizce yeni sürüm arar. Hata olursa sessizce geçer. */
+export async function autoCheck(now = Date.now(), force = false) {
   const st = useUpdateStore.getState();
-  if (now - st.lastCheck < SIX_HOURS) return;
+  const cur = currentVersion();
+
+  // Hafızadaki sürüm zaten kurulu sürüme eşit veya daha eskiyse temizle
+  if (st.available && compareVersions(st.available.version, cur) <= 0) {
+    st.set({ available: undefined });
+  }
+
+  if (!force && now - st.lastCheck < THIRTY_MINUTES) return;
   try {
-    const { latest, isNewer } = await fetchLatest();
+    const { latest, isNewer } = await fetchLatest(cur);
     st.set({ lastCheck: now, available: isNewer ? latest : undefined });
   } catch {
     // çevrimdışı olabilir; bir dahaki açılışta tekrar denenir

@@ -210,7 +210,8 @@ export function projectBg(bg: number, block: TimeBlock, iob: number, cob: number
 export function carbsToTarget(bg: number, block: TimeBlock, iob: number, cob = 0, rise = bgRisePerGram(block)): LowPlan {
   const eventualBg = projectBg(bg, block, iob, cob, rise);
   const total = Math.max(0, (block.target - eventualBg) / rise);
-  const forIob = Math.min(total, Math.max(0, iob * block.icr - cob));
+  const iobCarbNeed = rise > 0 ? (iob * block.isf) / rise : iob * block.icr;
+  const forIob = Math.min(total, Math.max(0, iobCarbNeed - cob));
   return {
     eventualBg: Math.round(eventualBg),
     carbs: Math.ceil(total / 5) * 5,

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
@@ -67,19 +67,43 @@ export function Collapsible({
   icon,
   children,
   initiallyOpen = false,
+  open: controlledOpen,
+  onToggle,
 }: {
   title: string;
   icon?: IconName;
   children: ReactNode;
   initiallyOpen?: boolean;
+  open?: boolean;
+  onToggle?: (next: boolean) => void;
 }) {
   const c = useTheme();
   const scheme = useScheme();
   const reduce = useReducedMotion();
-  const [open, setOpen] = useState(initiallyOpen);
+  const isWeb = Platform.OS === 'web';
+  const [internalOpen, setInternalOpen] = useState(initiallyOpen);
+  const open = controlledOpen ?? internalOpen;
+  const toggle = () => {
+    if (onToggle) onToggle(!open);
+    else setInternalOpen(!open);
+  };
+  if (isWeb) {
+    return (
+      <View style={[styles.coll, elevation(scheme), { backgroundColor: c.card, borderColor: scheme === 'dark' ? c.border : 'transparent' }]}>
+        <Pressable onPress={toggle} style={styles.collHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+          {icon ? <Ionicons name={icon} size={18} color={c.primary} /> : null}
+          <T variant="h2" style={{ flex: 1 }}>
+            {title}
+          </T>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={c.muted} />
+        </Pressable>
+        {open ? <View style={{ gap: Space.md, marginTop: Space.md }}>{children}</View> : null}
+      </View>
+    );
+  }
   return (
     <Animated.View layout={reduce ? undefined : LinearTransition.duration(260).easing(EASE_OUT)} style={[styles.coll, elevation(scheme), { backgroundColor: c.card, borderColor: scheme === 'dark' ? c.border : 'transparent' }]}>
-      <Pressable onPress={() => setOpen(!open)} style={styles.collHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+      <Pressable onPress={toggle} style={styles.collHead} accessibilityRole="button" accessibilityState={{ expanded: open }}>
         {icon ? <Ionicons name={icon} size={18} color={c.primary} /> : null}
         <T variant="h2" style={{ flex: 1 }}>
           {title}

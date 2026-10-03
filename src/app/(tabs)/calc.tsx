@@ -12,14 +12,14 @@ import { Btn, Card, Field, KV, Notice, Pressy, Row, Screen, Segmented, T, Toggle
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { currentTime, useCob, useIob, useNow } from '@/lib/hooks';
 import { toTimeInput } from '@/lib/input';
+import { cancelNotification, schedulePostMealReminder } from '@/lib/notifications';
 import { estimateBgAt } from '@/logic/bgtime';
 import { calcBolus, carbsForDose, carbsToTarget, checkBg, fmt } from '@/logic/bolus';
 import { carbsOnBoard, insulinOnBoard, recentBolus } from '@/logic/iob';
-import { mealAt, mealLabel } from '@/logic/meals';
-import { awaitingPost } from '@/logic/postmeal';
+import { mealLabel } from '@/logic/meals';
 import { chooseRise, hypoRiseSamples } from '@/logic/hypo';
 import { icrSample } from '@/logic/ratios';
-import { activeBlock, blockEnd, parseHHMM, scheduleProblems, sortBlocks } from '@/logic/schedule';
+import { activeBlock, blockEnd, scheduleProblems, sortBlocks } from '@/logic/schedule';
 import type { ExerciseLevel, Warning } from '@/logic/types';
 import { useDraft } from '@/store/draft';
 import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
@@ -77,9 +77,6 @@ export default function Calculator() {
   const [showLabel, setShowLabel] = useState(false);
   const [testOffer, setTestOffer] = useState<string | null>(null);
   const [useEstimate, setUseEstimate] = useState(true);
-  const [basalLater, setBasalLater] = useState(false);
-  const [postText, setPostText] = useState('');
-  const [postLater, setPostLater] = useState<string | null>(null);
 
   const problems = scheduleProblems(settings.blocks);
   // Oran dilimi, doz zamanına göre seçilir (geçmişe dönük kayıtta o saatin oranı)
@@ -129,29 +126,6 @@ export default function Calculator() {
   const hasInput = bgMeasured !== undefined || carbs > 0 || (mode === 'reverse' && unitText !== '');
   const isHypo = bgCheck.kind === 'hypo';
 
-  // Bazal: planlanan saat geçti ve kayıt yoksa sor
-  const basalDue = (() => {
-    if (!settings.basalDose || basalLater) return undefined;
-    const m = parseHHMM(settings.basalTime);
-    if (Number.isNaN(m)) return undefined;
-    const d = new Date(now);
-    d.setHours(Math.floor(m / 60), m % 60, 0, 0);
-    let expected = d.getTime();
-    if (expected > now) expected -= 86400000;
-    if (now - expected > 14 * 3600000) return undefined;
-    if (entries.some((e) => e.basal && e.time >= expected - 6 * 3600000)) return undefined;
-    return expected;
-  })();
-
-  // Yemekten 1–4 saat sonra: tokluk şekerini sor
-  const waiting = awaitingPost(entries, now);
-  const postBgValue = parseNum(postText);
-  function savePost() {
-    if (!waiting || postBgValue === undefined) return;
-    const entry = addLog({ time: currentTime(), bg: postBgValue, meal: waiting.meal ?? mealAt(waiting.time, settings.mealStarts), post: true, afterId: waiting.id });
-    setPostText('');
-    toast(`Tokluk şekeri ${postBgValue} kaydedildi`, { label: 'Geri al', onPress: () => useLog.getState().remove(entry.id) });
-  }
   // Son 30 dakikadaki kayıtlı ölçüm (doz hesabında kullanılabilir)
   const recentReading = [...entries].reverse().find((e) => e.bg !== undefined && (e.bgTime ?? e.time) <= now && now - (e.bgTime ?? e.time) <= 30 * 60000);
 
@@ -196,7 +170,12 @@ export default function Calculator() {
       foods: items ? items.map((i) => `${i.name} ${i.grams} g`).join(', ') : undefined,
     });
     resetForm();
-    if (mode === 'meal') clearCart();
+    if (mode === 'meal') {
+      if (carbs > 0 || (items && items.length > 0)) {
+        schedulePostMealReminder(120, mealLabel(when.meal)).catch(() => {});
+      }
+      clearCart();
+    }
     // Uygun bir öğünse, oran testi olarak takip etmeyi öner
     if (!activeTest && mode === 'meal') {
       const r = icrSample([...entries, entry], entry.id, settings.blocks, profile);
@@ -214,6 +193,7 @@ export default function Calculator() {
   function saveMeasurement() {
     if (bgMeasured === undefined) return;
     const entry = addLog({ time: when.bgEarlier || when.retro ? when.bgTime : currentTime(), bg: bgMeasured, meal: when.meal });
+    cancelNotification('tokluk-hatirlatici').catch(() => {});
     resetForm();
     toast(`Şeker ${bgMeasured} kaydedildi (${toTimeInput(entry.time)})`, { label: 'Geri al', onPress: () => useLog.getState().remove(entry.id) });
   }
@@ -270,33 +250,6 @@ export default function Calculator() {
         <Btn variant="dangerSoft" icon="alert-circle" title="Şekerim düşük (hipo)" onPress={() => router.push({ pathname: '/hypo', params: bgMeasured ? { bg: String(bgMeasured) } : {} })} />
       </>
 
-      {basalDue !== undefined ? (
-        <Card title="Bazal insülinini vurdun mu?" icon="moon">
-          <T variant="muted">
-            {settings.basalName || 'Bazal'} · {fmt(settings.basalDose)} Ü · saat {settings.basalTime}
-          </T>
-          <Row>
-            <Btn small variant="ghost" title="Sonra" onPress={() => setBasalLater(true)} />
-            <Btn small variant="secondary" title="Başka saatte" onPress={() => router.push({ pathname: '/entry', params: { basal: '1' } })} style={{ flexGrow: 1 }} />
-            <Btn
-              small
-              icon="checkmark"
-              title="Vurdum"
-              style={{ flexGrow: 1 }}
-              onPress={() => {
-                const entry = addLog({ time: basalDue, basal: settings.basalDose });
-                toast(`Bazal ${fmt(settings.basalDose)} Ü kaydedildi`, { label: 'Geri al', onPress: () => useLog.getState().remove(entry.id) });
-              }}
-            />
-          </Row>
-        </Card>
-      ) : null}
-
-      {settings.ratioSource === 'estimate' ? (
-        <Pressable onPress={() => router.navigate('/(tabs)/learn')}>
-          <Notice level="info" text="Oranların başlangıç tahmini. Gerçek oranlarını bulmak için Öğren > Oranlarımı bul testlerini yap. (Dokun)" />
-        </Pressable>
-      ) : null}
       {activeTest ? (
         <Pressable onPress={() => router.push('/test')}>
           <Notice level="info" text="Devam eden bir oran testin var. Durumunu görmek ve ölçümünü girmek için dokun." />
@@ -322,19 +275,6 @@ export default function Calculator() {
               }}
             />
           </Row>
-        </Card>
-      ) : null}
-
-      {waiting && postLater !== waiting.id ? (
-        <Card title="Tokluk şekerin nasıl?" icon="water-outline">
-          <T variant="muted">
-            {mealLabel(waiting.meal ?? mealAt(waiting.time, settings.mealStarts))} yemeğinden {Math.round((now - waiting.time) / 60000)} dk geçti. Şimdi ölçtüysen yaz; açlık şekerinle birlikte öğünün karşılaştırmasında görünür.
-          </T>
-          <Row>
-            <Field label="Tokluk şekeri" suffix="mg/dL" value={postText} onChangeText={setPostText} keyboard="number" placeholder="—" />
-            <Btn title="Kaydet" icon="checkmark" disabled={postBgValue === undefined} onPress={savePost} style={{ minWidth: 120 }} />
-          </Row>
-          <Btn small variant="ghost" title="Sonra" onPress={() => setPostLater(waiting.id)} />
         </Card>
       ) : null}
 
@@ -388,10 +328,34 @@ export default function Calculator() {
           <>
             {cart.length > 0 ? (
               <View style={[styles.cartBox, { borderColor: c.primary }]}>
-                <T style={{ flex: 1 }}>
-                  Tabaktan hesaplandı: <T style={{ fontWeight: '700' }}>{cartCarbs} g</T> ({cart.length} yemek)
-                </T>
-                <Btn small variant="ghost" icon="close" title="Temizle" onPress={clearCart} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <T style={{ flex: 1, fontWeight: '700', color: c.primary }}>
+                    Tabaktakiler: {cartCarbs} g KH ({cart.length} yemek)
+                  </T>
+                  <Btn small variant="ghost" icon="close" title="Temizle" onPress={clearCart} />
+                </View>
+                <View style={{ gap: 4, marginTop: 4 }}>
+                  {cart.map((item) => (
+                    <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}>
+                      <T style={{ flex: 1 }}>
+                        • {item.name} {item.grams > 0 ? `(${fmt(item.grams, 0)} g)` : ''}
+                      </T>
+                      <T style={{ fontWeight: '600', color: c.primary, fontVariant: ['tabular-nums'] }}>
+                        {fmt(item.carbs, 1)} g KH
+                      </T>
+                    </View>
+                  ))}
+                  {cartMeatRule(cart) > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}>
+                      <T variant="small" style={{ flex: 1, color: c.muted }}>
+                        • Et kuralı (100 g üzeri et)
+                      </T>
+                      <T variant="small" style={{ fontWeight: '600', color: c.primary, fontVariant: ['tabular-nums'] }}>
+                        +{fmt(cartMeatRule(cart), 0)} g KH
+                      </T>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             ) : null}
             <SameAsBefore meal={when.meal} before={when.doseTime} />
@@ -506,7 +470,11 @@ export default function Calculator() {
             <T variant="small">{low.carbs > 0 ? 'karbonhidrat ye (bunun için insülin vurma)' : 'Karbonhidrat almana gerek yok'}</T>
           </View>
           <KV k="1 g karbonhidrat şekeri yükseltir" v={`~${fmt(rise)} mg/dL`} />
-          <KV k="Aktif insülin ve KH bitince beklenen şeker" v={`~${Math.max(low.eventualBg, 0)} mg/dL`} />
+          {iob > 0.05 || cob >= 1 ? (
+            <KV k="Aktif insülin ve KH bitince beklenen şeker" v={`~${Math.max(low.eventualBg, 0)} mg/dL`} />
+          ) : (
+            <KV k="Aktif insülin ve KH etkisi" v="Vücutta aktif insülin yok" />
+          )}
           {low.carbs === 0 ? <Notice level="info" text="Aktif insülinin hesaba katıldığında hedefin altına inmen beklenmiyor." /> : null}
           <Warnings list={bgCheck.warnings} />
         </Card>
@@ -594,6 +562,6 @@ const styles = StyleSheet.create({
   iobBox: { borderRadius: Radius.md, padding: Space.md, alignItems: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   chip: { borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
-  cartBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, padding: Space.md },
+  cartBox: { borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, padding: Space.md, gap: Space.xs },
   resultHead: { alignItems: 'center', gap: 4 },
 });

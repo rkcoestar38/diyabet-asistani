@@ -184,6 +184,13 @@ describe('carbsToTarget / hypoPlan', () => {
     expect(p.carbs).toBe(15); // (110-60)/4 = 12.5 → 15
     expect(p.carbsForIob).toBe(10);
   });
+  it('adjusts IOB carb requirement when a custom rise factor is used', () => {
+    // 1 Ü insülin 40 düşürür; 1 g KH 2 yükseltiyorsa 40/2 = 20 g gerekir
+    const p = carbsToTarget(110, block, 1, 0, 2);
+    expect(p.eventualBg).toBe(70);
+    expect(p.carbs).toBe(20);
+    expect(p.carbsForIob).toBe(20);
+  });
   it('hypo plan: at least 15 g; 20 g if severe; more with IOB', () => {
     expect(hypoPlan(65, block, 0, settings)).toMatchObject({ severe: false, carbsNow: 15, carbsWithIob: 15 });
     expect(hypoPlan(50, block, 0, settings).carbsNow).toBe(20);
@@ -566,6 +573,40 @@ describe('doctor report', () => {
     expect(s.avgBasalPerDay).toBe(10);
     expect(rep.buildReportHtml({ entries: [], settings, from: day(1, 0), to: day(2, 0) })).toContain('Bu aralıkta kayıt yok');
   });
+  it('filters report sections based on user preferences', () => {
+    const htmlSummaryOnly = rep.buildReportHtml({
+      entries,
+      settings,
+      from: day(1, 0),
+      to: day(3, 0),
+      sections: {
+        summary: true,
+        observations: false,
+        meals: false,
+        ratios: false,
+        analysis: false,
+        chart: false,
+        dailyLogs: false,
+      },
+    });
+    expect(htmlSummaryOnly).toContain('<h2>Özet</h2>');
+    expect(htmlSummaryOnly).not.toContain('<h2>Şeker grafiği</h2>');
+    expect(htmlSummaryOnly).not.toContain('<h2>Kullanılan oranlar ve insülinler</h2>');
+    expect(htmlSummaryOnly).not.toContain('<h2>Günlük kayıtlar');
+
+    const htmlNoSummary = rep.buildReportHtml({
+      entries,
+      settings,
+      from: day(1, 0),
+      to: day(3, 0),
+      sections: {
+        summary: false,
+        chart: true,
+      },
+    });
+    expect(htmlNoSummary).not.toContain('<h2>Özet</h2>');
+    expect(htmlNoSummary).toContain('<h2>Şeker grafiği</h2>');
+  });
 });
 
 describe('meals and measurement time', () => {
@@ -606,6 +647,13 @@ describe('meals and measurement time', () => {
     ];
     const r = m.previousMeals(entries, 'sabah', S, at(7));
     expect(r.map((e) => e.id)).toEqual(['4', '1']);
+  });
+  it('validates meal schedule and detects chronological/duplicate errors', () => {
+    expect(m.mealScheduleProblems(S)).toEqual([]);
+    const dup = { ...S, ogleAra: '12:00' };
+    expect(m.mealScheduleProblems(dup).some((x: string) => x.includes('aynı saatte'))).toBe(true);
+    const rev = { ...S, ogle: '09:00' };
+    expect(m.mealScheduleProblems(rev).some((x: string) => x.includes('önce başlamalı'))).toBe(true);
   });
 
   const block1: TimeBlock = { id: 'b', name: 'x', start: '00:00', icr: 10, isf: 40, target: 110, low: 80, high: 140 };

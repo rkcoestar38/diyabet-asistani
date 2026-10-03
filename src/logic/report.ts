@@ -264,6 +264,26 @@ function observationsHtml(entries: LogEntry[], settings: Settings): string {
   return o.length ? `<h2>Dikkat çeken noktalar</h2><ul>${o.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
 }
 
+export type ReportSections = {
+  summary: boolean;
+  observations: boolean;
+  meals: boolean;
+  ratios: boolean;
+  analysis: boolean;
+  chart: boolean;
+  dailyLogs: boolean;
+};
+
+export const DEFAULT_REPORT_SECTIONS: ReportSections = {
+  summary: true,
+  observations: true,
+  meals: true,
+  ratios: true,
+  analysis: true,
+  chart: true,
+  dailyLogs: true,
+};
+
 export type ReportInput = {
   entries: LogEntry[];
   settings: Settings;
@@ -274,10 +294,20 @@ export type ReportInput = {
   /** Biten rehberli bazal testleri */
   basalTests?: { startTime: number; endTime: number }[];
   generatedAt?: number;
+  sections?: Partial<ReportSections>;
 };
 
 /** Doktora gösterilecek tek sayfalık/çok sayfalık rapor (HTML). PDF'e dönüştürülür. */
-export function buildReportHtml({ entries, settings, from, to, ratioChanges = [], basalTests = [], generatedAt = Date.now() }: ReportInput): string {
+export function buildReportHtml({
+  entries,
+  settings,
+  from,
+  to,
+  ratioChanges = [],
+  basalTests = [],
+  generatedAt = Date.now(),
+  sections = {},
+}: ReportInput): string {
   const inRange = entries.filter((e) => e.time >= from && e.time < to).sort((a, b) => a.time - b.time);
   const st = rangeStats(inRange, settings);
   const periodLabel = dayLabel(from, false) === dayLabel(to - 1, false) ? dayLabel(from) : `${dayLabel(from, false)} – ${dayLabel(to - 1, false)}`;
@@ -333,8 +363,54 @@ export function buildReportHtml({ entries, settings, from, to, ratioChanges = []
         '<tr><td>' + esc(m.label) + '</td><td>' + m.count + '</td><td>' + (m.avgBgBefore ?? '—') + '</td><td>' + (m.avgBgAfter ?? '—') + '</td><td>' + (m.avgRise !== undefined ? (m.avgRise > 0 ? '+' : '') + m.avgRise + ' (' + m.pairs + ')' : '—') + '</td><td>' + (m.avgBg ?? '—') + '</td><td>' + (m.avgCarbs !== undefined ? m.avgCarbs + ' g' : '—') + '</td><td>' + (m.avgBolus !== undefined ? fmt(m.avgBolus) + ' Ü' : '—') + '</td><td>' + m.hypos + '</td></tr>',
     )
     .join('');
+  const sec = { ...DEFAULT_REPORT_SECTIONS, ...sections };
 
-  return `<!DOCTYPE html><html lang=\"tr\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>
+  const summaryHtml = sec.summary
+    ? `
+<h2>Özet</h2>
+<div class="stats">
+${stat('Ortalama şeker (mg/dL)', st.avg !== undefined ? String(st.avg) : '—')}
+${stat('Hedef aralıkta', pct(st.inRange))}
+${stat('Hedefin altında', pct(st.below))}
+${stat('Hedefin üstünde', pct(st.above))}
+${stat('Ölçüm sayısı (en düşük–en yüksek)', st.readings ? `${st.readings} (${st.min}–${st.max})` : '—')}
+${stat('Tahmini HbA1c (GMI)', st.gmi !== undefined && st.readings >= 5 ? `%${st.gmi}` : '—')}
+${stat('Değişkenlik: SS / CV', st.sd !== undefined ? `${st.sd} / %${st.cv ?? '—'}` : '—')}
+${stat('Hipo atağı', String(st.hypos))}
+${stat('Günlük karbonhidrat (ort.)', st.avgCarbsPerDay !== undefined ? `${st.avgCarbsPerDay} g` : '—')}
+${stat(st.avgBasalPerDay === 0 && settings.basalDose ? 'Günlük hızlı insülin (bazal kaydı yok)' : 'Günlük toplam insülin (ort.)', st.avgTotalPerDay !== undefined ? `${fmt(st.avgTotalPerDay)} Ü` : '—')}
+${stat('Günlük hızlı insülin (ort.)', st.avgBolusPerDay !== undefined ? `${fmt(st.avgBolusPerDay)} Ü` : '—')}
+${st.avgBasalPerDay === 0 && settings.basalDose ? stat('Bazal', `kayıt yok · ayarlı ${fmt(settings.basalDose)} Ü`) : stat('Günlük bazal (ort.)', st.avgBasalPerDay !== undefined ? `${fmt(st.avgBasalPerDay)} Ü` : '—')}
+</div>
+${st.readings ? `<div class="tir"><div style="width:${st.below ?? 0}%;background:#c23a2e"></div><div style="width:${st.inRange ?? 0}%;background:#2e9e6b"></div><div style="width:${st.above ?? 0}%;background:#e0a02e"></div></div><div class="tirl"><span>Hedefin altı %${st.below ?? 0}</span><span>Hedef aralık %${st.inRange ?? 0}</span><span>Hedefin üstü %${st.above ?? 0}</span></div>` : ''}
+`
+    : '';
+
+  const observationsHtmlContent = sec.observations ? observationsHtml(inRange, settings) : '';
+
+  const mealsHtmlContent =
+    sec.meals && mealRows
+      ? `<h2>Öğünlere göre özet</h2><table class="meals"><thead><tr><th>Öğün</th><th>Kayıt</th><th>Öğün öncesi (açlık) ort.</th><th>Tokluk ort.</th><th>Tokluk − açlık (çift)</th><th>Tüm ölçümler ort.</th><th>Ort. karbonhidrat</th><th>Ort. hızlı insülin</th><th>Hipo</th></tr></thead><tbody>${mealRows}</tbody></table>`
+      : '';
+
+  const ratiosHtmlContent = sec.ratios
+    ? `
+<h2>Kullanılan oranlar ve insülinler</h2>
+<table><thead><tr><th>Saat dilimi</th><th>Karbonhidrat oranı</th><th>Düzeltme faktörü</th><th>Hedef (mg/dL)</th><th>Hedef aralık</th></tr></thead><tbody>${ratioRows}</tbody></table>
+<div class="sub" style="margin-top:6px">Hızlı insülin: ${esc(settings.rapidName || 'adı girilmedi')} (etki süresi ${fmt(settings.dia)} sa, kalem adımı ${fmt(settings.penStep)} Ü)${settings.basalName || settings.basalDose ? ` · Bazal: ${esc(settings.basalName || '—')}${settings.basalDose ? ` ${fmt(settings.basalDose)} Ü` : ''}${settings.basalTime ? `, saat ${esc(settings.basalTime)}` : ''}` : ''}</div>
+${changes ? `<div class="sub">Bu aralıkta yapılan oran değişiklikleri:</div><ul>${changes}</ul>` : ''}
+`
+    : '';
+
+  const analysisHtmlContent = sec.analysis ? analysisHtml({ entries, settings, now: Math.min(to, generatedAt), basalTests }) : '';
+
+  const chartHtmlContent = sec.chart && svg ? `<h2>Şeker grafiği</h2>${svg}<div class="sub">Yeşil bant: hedef aralık · kırmızı çizgi: ${settings.hypoThreshold} mg/dL</div>` : '';
+
+  const dailyLogsHtmlContent = sec.dailyLogs
+    ? `<h2>Günlük kayıtlar (ölçüm, yemek ve insülin saatleriyle)</h2>${days || '<p>Bu aralıkta kayıt yok.</p>'}`
+    : '';
+
+  return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Diyabet raporu</title>
 <style>
 @page { size: A4; margin: 14mm; }
@@ -364,41 +440,22 @@ ul { margin: 4px 0 0 16px; padding: 0; }
 .foot { margin-top: 14px; color: #7a8d90; font-size: 9px; }
 </style></head><body>
 <h1>Diyabet raporu</h1>
-<div class=\"sub\">${esc(settings.patientName ? settings.patientName + ' · ' : '')}${esc(periodLabel)} · ${Math.round((to - from) / DAY)} günlük aralıkta ${st.days} günün kaydı · ${inRange.length} kayıt</div>
+<div class="sub">${esc(settings.patientName ? settings.patientName + ' · ' : '')}${esc(periodLabel)} · ${Math.round((to - from) / DAY)} günlük aralıkta ${st.days} günün kaydı · ${inRange.length} kayıt</div>
 
-<h2>Özet</h2>
-<div class=\"stats\">
-${stat('Ortalama şeker (mg/dL)', st.avg !== undefined ? String(st.avg) : '—')}
-${stat('Hedef aralıkta', pct(st.inRange))}
-${stat('Hedefin altında', pct(st.below))}
-${stat('Hedefin üstünde', pct(st.above))}
-${stat('Ölçüm sayısı (en düşük–en yüksek)', st.readings ? `${st.readings} (${st.min}–${st.max})` : '—')}
-${stat('Tahmini HbA1c (GMI)', st.gmi !== undefined && st.readings >= 5 ? `%${st.gmi}` : '—')}
-${stat('Değişkenlik: SS / CV', st.sd !== undefined ? `${st.sd} / %${st.cv ?? '—'}` : '—')}
-${stat('Hipo atağı', String(st.hypos))}
-${stat('Günlük karbonhidrat (ort.)', st.avgCarbsPerDay !== undefined ? `${st.avgCarbsPerDay} g` : '—')}
-${stat(st.avgBasalPerDay === 0 && settings.basalDose ? 'Günlük hızlı insülin (bazal kaydı yok)' : 'Günlük toplam insülin (ort.)', st.avgTotalPerDay !== undefined ? `${fmt(st.avgTotalPerDay)} Ü` : '—')}
-${stat('Günlük hızlı insülin (ort.)', st.avgBolusPerDay !== undefined ? `${fmt(st.avgBolusPerDay)} Ü` : '—')}
-${st.avgBasalPerDay === 0 && settings.basalDose ? stat('Bazal', `kayıt yok · ayarlı ${fmt(settings.basalDose)} Ü`) : stat('Günlük bazal (ort.)', st.avgBasalPerDay !== undefined ? `${fmt(st.avgBasalPerDay)} Ü` : '—')}
-</div>
-${st.readings ? `<div class="tir"><div style="width:${st.below ?? 0}%;background:#c23a2e"></div><div style="width:${st.inRange ?? 0}%;background:#2e9e6b"></div><div style="width:${st.above ?? 0}%;background:#e0a02e"></div></div><div class="tirl"><span>Hedefin altı %${st.below ?? 0}</span><span>Hedef aralık %${st.inRange ?? 0}</span><span>Hedefin üstü %${st.above ?? 0}</span></div>` : ''}
+${summaryHtml}
 
-${observationsHtml(inRange, settings)}
+${observationsHtmlContent}
 
-${mealRows ? `<h2>Öğünlere göre özet</h2><table class=\"meals\"><thead><tr><th>Öğün</th><th>Kayıt</th><th>Öğün öncesi (açlık) ort.</th><th>Tokluk ort.</th><th>Tokluk − açlık (çift)</th><th>Tüm ölçümler ort.</th><th>Ort. karbonhidrat</th><th>Ort. hızlı insülin</th><th>Hipo</th></tr></thead><tbody>${mealRows}</tbody></table>` : ''}
+${mealsHtmlContent}
 
-<h2>Kullanılan oranlar ve insülinler</h2>
-<table><thead><tr><th>Saat dilimi</th><th>Karbonhidrat oranı</th><th>Düzeltme faktörü</th><th>Hedef (mg/dL)</th><th>Hedef aralık</th></tr></thead><tbody>${ratioRows}</tbody></table>
-<div class=\"sub\" style=\"margin-top:6px\">Hızlı insülin: ${esc(settings.rapidName || 'adı girilmedi')} (etki süresi ${fmt(settings.dia)} sa, kalem adımı ${fmt(settings.penStep)} Ü)${settings.basalName || settings.basalDose ? ` · Bazal: ${esc(settings.basalName || '—')}${settings.basalDose ? ` ${fmt(settings.basalDose)} Ü` : ''}${settings.basalTime ? `, saat ${esc(settings.basalTime)}` : ''}` : ''}</div>
-${changes ? `<div class=\"sub\">Bu aralıkta yapılan oran değişiklikleri:</div><ul>${changes}</ul>` : ''}
+${ratiosHtmlContent}
 
-${analysisHtml({ entries, settings, now: Math.min(to, generatedAt), basalTests })}
+${analysisHtmlContent}
 
-${svg ? `<h2>Şeker grafiği</h2>${svg}<div class=\"sub\">Yeşil bant: hedef aralık · kırmızı çizgi: ${settings.hypoThreshold} mg/dL</div>` : ''}
+${chartHtmlContent}
 
-<h2>Günlük kayıtlar (ölçüm, yemek ve insülin saatleriyle)</h2>
-${days || '<p>Bu aralıkta kayıt yok.</p>'}
+${dailyLogsHtmlContent}
 
-<div class=\"foot\">Diyabet Asistanı ile oluşturuldu · ${esc(dayLabel(generatedAt, false))} ${timeLabel(generatedAt)}</div>
+<div class="foot">Diyabet Asistanı ile oluşturuldu · ${esc(dayLabel(generatedAt, false))} ${timeLabel(generatedAt)}</div>
 </body></html>`;
 }

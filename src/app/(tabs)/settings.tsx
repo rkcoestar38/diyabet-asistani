@@ -10,7 +10,7 @@ import { notificationsSupported, notificationsUnsupportedReason, scheduledBasal,
 import { backupNow } from '@/lib/backup';
 import { pickText } from '@/lib/files';
 import { isWeb } from '@/lib/web';
-import { DEFAULT_MEAL_STARTS, MEALS } from '@/logic/meals';
+import { DEFAULT_MEAL_STARTS, MEALS, mealScheduleProblems } from '@/logic/meals';
 import { parseHHMM } from '@/logic/schedule';
 import { useFoods } from '@/store/foods';
 import { toast } from '@/store/toast';
@@ -193,6 +193,8 @@ function MealTimes() {
   const starts = useSettings((st) => st.settings.mealStarts);
   const update = useSettings((st) => st.update);
   const [texts, setTexts] = useState<Record<string, string>>({ ...starts });
+  const problems = mealScheduleProblems(starts);
+
   return (
     <Collapsible title="Öğün saatleri" icon="restaurant-outline">
       <T variant="muted">Öğünün başladığı saat. Kayıt eklerken öğün, saatine göre buradan otomatik seçilir; istersen elle değiştirirsin.</T>
@@ -203,12 +205,15 @@ function MealTimes() {
             label={m.label}
             value={texts[m.id] ?? ''}
             onChange={(v) => {
-              setTexts({ ...texts, [m.id]: v });
-              if (!Number.isNaN(parseHHMM(v)) && /^d{2}:d{2}$/.test(v)) update({ mealStarts: { ...starts, [m.id]: v } });
+              setTexts((prev) => ({ ...prev, [m.id]: v }));
+              if (!Number.isNaN(parseHHMM(v)) && /^\d{2}:\d{2}$/.test(v)) update({ mealStarts: { ...starts, [m.id]: v } });
             }}
           />
         ))}
       </Row>
+      {problems.map((p) => (
+        <Notice key={p} level="warn" text={p} />
+      ))}
       <Btn
         small
         variant="ghost"
