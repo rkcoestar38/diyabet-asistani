@@ -37,7 +37,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 export const currentVersion = (): string =>
-  Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.4';
+  Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.7';
 
 type Release = { tag_name?: string; html_url?: string; body?: string; draft?: boolean; prerelease?: boolean; assets?: { name: string; browser_download_url: string }[] };
 

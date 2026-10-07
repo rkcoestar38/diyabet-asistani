@@ -2,7 +2,7 @@
   "expo": {
     "name": "Diyabet Asistanı",
     "slug": "diyabet-asistani",
-    "version": "1.0.4",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "diyabetasistani",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.diyabetasistani.app",
-      "versionCode": 4
+      "versionCode": 7
     },
     "web": {
       "output": "single",
