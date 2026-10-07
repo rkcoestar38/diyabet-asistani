@@ -5,7 +5,20 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 
 import { Btn, Card, Field, Notice, Row, Screen, T, Toggle, confirm, parseNum } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
-import { CATEGORIES, FOODS, MEAT_RULE_CARBS, MEAT_RULE_GRAMS, carbsFor, normalize, per100 as foodPer100, type Food } from '@/data/foods-tr';
+import {
+  CATEGORIES,
+  FOODS,
+  MEAT_RULE_CARBS,
+  MEAT_RULE_GRAMS,
+  PORTION_CATEGORY_LABELS,
+  carbsFor,
+  getPortionCategory,
+  normalize,
+  per100 as foodPer100,
+  type Food,
+  type Portion,
+  type PortionCategory,
+} from '@/data/foods-tr';
 import { fmt } from '@/logic/bolus';
 import { MealChips, useWhen } from '@/components/when';
 import { SameAsBefore } from '@/components/same-meal';
@@ -20,8 +33,21 @@ const MINE = 'Benim yemeklerim';
 
 export function FoodBrowser({ picker }: { picker?: boolean }) {
   const c = useTheme();
-  const { customFoods, favorites, meals, cart, toggleFavorite, addToCart, updateCartGrams, removeFromCart, clearCart, saveMeal, loadMeal, removeMeal, removeCustomFood } =
-    useFoods();
+  const {
+    customFoods,
+    favorites,
+    meals,
+    cart,
+    toggleFavorite,
+    addToCart,
+    updateCartGrams,
+    removeFromCart,
+    clearCart,
+    saveMeal,
+    loadMeal,
+    removeMeal,
+    removeCustomFood,
+  } = useFoods();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>(FAV);
   const [selected, setSelected] = useState<Food | null>(null);
@@ -60,44 +86,47 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
           </>
         ) : null}
         {cart.length === 0 ? (
-          <T variant="muted">Aşağıdan yemek seç; porsiyon veya gram gir. Toplam, Hesapla ekranına aktarılır.</T>
+          <T variant="muted">Aşağıdan yemek seç; boyut, porsiyon veya gram belirle. Toplam, Hesapla ekranına aktarılır.</T>
         ) : (
           <>
-            {cart.map((i) => (
-              <View key={i.id} style={[styles.cartRow, { borderColor: c.border }]}>
-                <View style={{ flex: 1 }}>
-                  <T style={{ fontWeight: '600' }}>{i.name}</T>
-                  <T variant="small" color="muted">
-                    {fmt(i.carbs)} g KH
-                  </T>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Pressable
-                    onPress={() => {
-                      if (i.grams <= 10) removeFromCart(i.id);
-                      else updateCartGrams(i.id, Math.max(0, i.grams - 10));
-                    }}
-                    hitSlop={8}
-                    accessibilityLabel={`${i.name} 10 gram azalt`}
-                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="remove" size={16} color={c.text} />
+            {cart.map((i) => {
+              const step = i.portionGrams && i.portionGrams <= 50 ? i.portionGrams : 10;
+              return (
+                <View key={i.id} style={[styles.cartRow, { borderColor: c.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <T style={{ fontWeight: '600' }}>{i.name}</T>
+                    <T variant="small" color="muted">
+                      {fmt(i.carbs)} g KH {i.portionLabel ? `· ${i.portionLabel}` : ''}
+                    </T>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Pressable
+                      onPress={() => {
+                        if (i.grams <= step) removeFromCart(i.id);
+                        else updateCartGrams(i.id, Math.max(0, i.grams - step));
+                      }}
+                      hitSlop={8}
+                      accessibilityLabel={`${i.name} ${step} gram azalt`}
+                      style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="remove" size={16} color={c.text} />
+                    </Pressable>
+                    <T style={{ minWidth: 48, textAlign: 'center', fontWeight: '700' }}>
+                      {fmt(i.grams, 0)} g
+                    </T>
+                    <Pressable
+                      onPress={() => updateCartGrams(i.id, i.grams + step)}
+                      hitSlop={8}
+                      accessibilityLabel={`${i.name} ${step} gram artır`}
+                      style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={16} color={c.text} />
+                    </Pressable>
+                  </View>
+                  <Pressable onPress={() => removeFromCart(i.id)} hitSlop={10} accessibilityLabel={`${i.name} çıkar`}>
+                    <Ionicons name="close-circle" size={22} color={c.muted} />
                   </Pressable>
-                  <T style={{ minWidth: 44, textAlign: 'center', fontWeight: '700' }}>
-                    {fmt(i.grams, 0)} g
-                  </T>
-                  <Pressable
-                    onPress={() => updateCartGrams(i.id, i.grams + 10)}
-                    hitSlop={8}
-                    accessibilityLabel={`${i.name} 10 gram artır`}
-                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.cardAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="add" size={16} color={c.text} />
-                  </Pressable>
                 </View>
-                <Pressable onPress={() => removeFromCart(i.id)} hitSlop={10} accessibilityLabel={`${i.name} çıkar`}>
-                  <Ionicons name="close-circle" size={22} color={c.muted} />
-                </Pressable>
-              </View>
-            ))}
+              );
+            })}
             {meatExtra > 0 ? (
               <View style={[styles.cartRow, { borderColor: c.border }]}>
                 <T style={{ flex: 1 }}>
@@ -164,8 +193,17 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
           key={selected.id}
           food={selected}
           onClose={() => setSelected(null)}
-          onAdd={(grams) => {
-            const item = { foodId: selected.id, name: selected.name, grams, carbs: carbsFor(selected, grams, method), fatty: selected.fatty, meat: selected.meat };
+          onAdd={(grams, portionLabel, portionGrams) => {
+            const item = {
+              foodId: selected.id,
+              name: selected.name,
+              grams,
+              carbs: carbsFor(selected, grams, method),
+              fatty: selected.fatty,
+              meat: selected.meat,
+              portionLabel,
+              portionGrams,
+            };
             addToCart(item);
             toast(`${selected.name} eklendi · tabakta ${cartTotal([...cart, { ...item, id: 'tmp' }])} g`);
             setSelected(null);
@@ -186,7 +224,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Yemek ara (ör. simit, pilav)"
+          placeholder="Yemek ara (ör. simit, elma, pilav)"
           placeholderTextColor={c.muted}
           style={[styles.searchInput, { color: c.text }]}
         />
@@ -242,6 +280,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
                 </View>
                 <T variant="small">
                   {f.portions[0].label} ({f.portions[0].grams} g) ≈ {fmt(carbsFor(f, f.portions[0].grams, method), 1)} g KH
+                  {f.portions.length > 1 ? ` · ${f.portions.length} farklı porsiyon` : ''}
                   {f.fatty ? ' · yağlı' : ''}
                   {f.fast ? ' · hızlı' : ''}
                 </T>
@@ -252,7 +291,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
         )}
       </Card>
       <T variant="small" style={{ textAlign: 'center' }}>
-        Değerler yaklaşıktır (100 g başına, lif hariç). Paketli ürünlerde etiketteki değeri kullan.
+        Değerler TürKomp ve TÜBER 2022 standartlarına uygundur (lif hariç). Paketli ürünlerde etiketteki değeri kullanın.
       </T>
     </Screen>
   );
@@ -267,19 +306,67 @@ function AddFood({
   onDelete,
 }: {
   food: Food;
-  onAdd: (grams: number) => void;
+  onAdd: (grams: number, portionLabel?: string, portionGrams?: number) => void;
   onClose: () => void;
   favorite: boolean;
   onToggleFavorite: () => void;
   onDelete?: () => void;
 }) {
   const c = useTheme();
-  const [portion, setPortion] = useState(0);
-  const [count, setCount] = useState('1');
-  const [gramText, setGramText] = useState('');
-  const grams = parseNum(gramText) ?? (parseNum(count) ?? 0) * food.portions[portion].grams;
   const method = useSettings((s) => s.settings.countMethod);
-  const carbs = carbsFor(food, grams, method);
+
+  // Porsiyon kategorilerini tespit et
+  const categoriesInFood = useMemo(() => {
+    const cats = new Set<PortionCategory>();
+    for (const p of food.portions) {
+      cats.add(getPortionCategory(p));
+    }
+    return Array.from(cats);
+  }, [food.portions]);
+
+  const [filterCat, setFilterCat] = useState<string>('all');
+  const [portionIndex, setPortionIndex] = useState(0);
+  const [multiplier, setMultiplier] = useState('1');
+  const [gramText, setGramText] = useState('');
+
+  // Filtrelenmiş porsiyon listesi
+  const filteredPortions = useMemo(() => {
+    if (filterCat === 'all') return food.portions;
+    return food.portions.filter((p) => getPortionCategory(p) === filterCat);
+  }, [food.portions, filterCat]);
+
+  // Seçili porsiyon (orijinal dizideki veya filtrelenendeki)
+  const currentPortion: Portion = food.portions[portionIndex] ?? food.portions[0];
+
+  // Gramaj hesabı: Kullanıcı doğrudan gram kutusuna değer girdiyse o; aksi halde (çarpan * porsiyon gramı)
+  const isDirectGram = Boolean(gramText.trim());
+  const parsedCount = parseNum(multiplier) ?? 1;
+  const calculatedGrams = isDirectGram
+    ? (parseNum(gramText) ?? 0)
+    : Math.round(parsedCount * currentPortion.grams);
+
+  const carbs = carbsFor(food, calculatedGrams, method);
+
+  const handleSelectPortion = (p: Portion) => {
+    const originalIdx = food.portions.findIndex((x) => x.label === p.label && x.grams === p.grams);
+    if (originalIdx >= 0) setPortionIndex(originalIdx);
+    setGramText(''); // Gram text'i sıfırlayıp porsiyon hesabına dön
+  };
+
+  const handleStepMultiplier = (delta: number) => {
+    const current = parseNum(multiplier) ?? 1;
+    const next = Math.max(0.5, Math.round((current + delta) * 2) / 2);
+    setMultiplier(String(next));
+    setGramText('');
+  };
+
+  const handleConfirmAdd = () => {
+    if (calculatedGrams <= 0) return;
+    const label = isDirectGram
+      ? `${calculatedGrams} g`
+      : `${parsedCount > 1 ? `${parsedCount}x ` : ''}${currentPortion.label} (${calculatedGrams} g)`;
+    onAdd(calculatedGrams, label, currentPortion.grams);
+  };
 
   return (
     <Card
@@ -297,45 +384,165 @@ function AddFood({
         </Row>
       }>
       <T variant="muted">
-        100 g = {fmt(foodPer100(food, method))} g karbonhidrat ({method === 'exchange' ? 'değişim listesi' : 'gerçek bileşim'})
+        100 g = {fmt(foodPer100(food, method))} g karbonhidrat ({method === 'exchange' ? 'TÜBER değişim listesi' : 'TürKomp gerçek bileşim'})
       </T>
       {food.meat && method === 'exchange' ? (
         <T variant="small">Öğünde toplam {MEAT_RULE_GRAMS} g üzeri et tüketirsen +{MEAT_RULE_CARBS} g KHO eklenir.</T>
       ) : null}
-      <T variant="small">Bir porsiyona dokununca yemek tabağa eklenir. Farklı bir miktar için gram yaz.</T>
-      <View style={styles.portions}>
-        {food.portions.map((p, i) => {
-          const active = i === portion && !gramText;
-          return (
+
+      {/* Porsiyon Kategorisi Sekmeleri (Varsa) */}
+      {categoriesInFood.length > 1 ? (
+        <View style={{ marginTop: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Space.xs }}>
             <Pressable
-              key={p.label}
-              onPress={() => {
-                // Porsiyona dokununca yemek (adet kadar) doğrudan tabağa eklenir; ayrıca onay gerekmez
-                setPortion(i);
-                setGramText('');
-                onAdd(Math.round((parseNum(count) ?? 1) * p.grams));
-              }}
-              accessibilityLabel={`${p.label} ekle`}
-              style={[styles.chip, { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : 'transparent' }]}>
-              <T variant="small" color={active ? 'primary' : 'text'}>
-                {p.label} ({p.grams} g) · {fmt(carbsFor(food, p.grams, method), 1)} g KH
+              onPress={() => setFilterCat('all')}
+              style={[
+                styles.categoryFilterChip,
+                {
+                  backgroundColor: filterCat === 'all' ? c.primary : c.cardAlt,
+                  borderColor: filterCat === 'all' ? c.primary : c.border,
+                },
+              ]}>
+              <T variant="small" style={{ color: filterCat === 'all' ? c.onPrimary : c.text, fontWeight: '600' }}>
+                Tüm Seçenekler
               </T>
             </Pressable>
-          );
-        })}
-      </View>
-      <Row>
-        <Field label="Adet / porsiyon" value={count} onChangeText={(s) => { setCount(s); setGramText(''); }} />
-        <Field label="veya gram" suffix="g" value={gramText} placeholder={fmt(grams, 0)} onChangeText={setGramText} />
-      </Row>
-      <View style={{ alignItems: 'center' }}>
-        <T variant="big" color="primary">
-          {fmt(carbs)} g
+            {categoriesInFood.map((catKey) => {
+              const active = filterCat === catKey;
+              return (
+                <Pressable
+                  key={catKey}
+                  onPress={() => setFilterCat(catKey)}
+                  style={[
+                    styles.categoryFilterChip,
+                    {
+                      backgroundColor: active ? c.primary : c.cardAlt,
+                      borderColor: active ? c.primary : c.border,
+                    },
+                  ]}>
+                  <T variant="small" style={{ color: active ? c.onPrimary : c.text, fontWeight: '600' }}>
+                    {PORTION_CATEGORY_LABELS[catKey]}
+                  </T>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Porsiyon Kartları / Çipler */}
+      <View style={styles.portionSection}>
+        <T variant="small" style={{ fontWeight: '600' }}>
+          Porsiyon / Boyut Seç:
         </T>
-        <T variant="small">karbonhidrat ({fmt(grams, 0)} g yiyecek)</T>
+        <View style={styles.portions}>
+          {filteredPortions.map((p) => {
+            const isSelected = p.label === currentPortion.label && p.grams === currentPortion.grams && !isDirectGram;
+            const singleCarb = carbsFor(food, p.grams, method);
+            return (
+              <Pressable
+                key={`${p.label}-${p.grams}`}
+                onPress={() => handleSelectPortion(p)}
+                accessibilityLabel={`${p.label} seç`}
+                style={[
+                  styles.portionCard,
+                  {
+                    borderColor: isSelected ? c.primary : c.border,
+                    backgroundColor: isSelected ? c.primarySoft : c.cardAlt,
+                  },
+                ]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <T style={{ fontWeight: isSelected ? '700' : '500', fontSize: 13, color: isSelected ? c.primary : c.text }}>
+                    {p.label}
+                  </T>
+                  {isSelected ? <Ionicons name="checkmark-circle" size={14} color={c.primary} /> : null}
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+                  <T variant="small" color="muted">
+                    {p.grams} g
+                  </T>
+                  <T variant="small" style={{ fontWeight: '600', color: isSelected ? c.primary : c.text }}>
+                    {fmt(singleCarb, 1)} g KH
+                  </T>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
+
+      {/* Miktar Stepper & Serbest Gram Girişi */}
+      <View style={{ gap: Space.sm, marginTop: 4 }}>
+        <Row gap={Space.sm} style={{ alignItems: 'flex-end' }}>
+          {/* Adet / Çarpan Stepper */}
+          <View style={{ flex: 1 }}>
+            <T variant="small" color="muted" style={{ marginBottom: 4 }}>
+              Adet / Miktar
+            </T>
+            <View style={[styles.stepperContainer, { borderColor: c.border, backgroundColor: c.cardAlt }]}>
+              <Pressable
+                onPress={() => handleStepMultiplier(-0.5)}
+                hitSlop={6}
+                accessibilityLabel="Adet azalt"
+                style={styles.stepperBtn}>
+                <Ionicons name="remove" size={18} color={c.text} />
+              </Pressable>
+              <TextInput
+                value={multiplier}
+                onChangeText={(s) => {
+                  setMultiplier(s);
+                  setGramText('');
+                }}
+                keyboardType="decimal-pad"
+                style={[styles.stepperInput, { color: c.text }]}
+              />
+              <Pressable
+                onPress={() => handleStepMultiplier(0.5)}
+                hitSlop={6}
+                accessibilityLabel="Adet artır"
+                style={styles.stepperBtn}>
+                <Ionicons name="add" size={18} color={c.text} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Serbest Gram Kutusu */}
+          <View style={{ flex: 1 }}>
+            <Field
+              label="veya Net Gramaj"
+              suffix="g"
+              keyboard="decimal"
+              value={gramText}
+              placeholder={String(calculatedGrams)}
+              onChangeText={setGramText}
+            />
+          </View>
+        </Row>
+      </View>
+
+      {/* Büyük Canlı Sonuç */}
+      <View style={[styles.resultBox, { backgroundColor: c.primarySoft, borderColor: c.primary }]}>
+        <T variant="big" color="primary">
+          {fmt(carbs, 1)} g
+        </T>
+        <T variant="small" style={{ fontWeight: '600', color: c.text }}>
+          karbonhidrat · {calculatedGrams} g yiyecek
+        </T>
+        <T variant="small" color="muted">
+          {isDirectGram
+            ? 'Terazi gramajı girildi'
+            : `${multiplier} x ${currentPortion.label}`}
+        </T>
+      </View>
+
       {food.fatty ? <Notice level="info" text="Yağlı/proteinli yiyecek: şeker geç yükselebilir." /> : null}
-      <Btn title="Bu gramı tabağa ekle" icon="add-circle" disabled={!(grams > 0)} onPress={() => onAdd(Math.round(grams))} />
+
+      <Btn
+        title={`Bu Miktarı Tabağa Ekle (${fmt(carbs, 1)} g KH)`}
+        icon="add-circle"
+        disabled={!(calculatedGrams > 0)}
+        onPress={handleConfirmAdd}
+      />
       {onDelete ? <Btn variant="ghost" icon="trash-outline" title="Bu yemeği sil" onPress={onDelete} /> : null}
     </Card>
   );
@@ -390,5 +597,12 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Space.md },
   searchInput: { flex: 1, fontSize: 17, paddingVertical: 12 },
   chip: { borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
-  portions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
+  categoryFilterChip: { borderWidth: 1, borderRadius: Radius.sm, paddingVertical: 5, paddingHorizontal: 10 },
+  portionSection: { gap: Space.xs, marginTop: Space.xs },
+  portions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.xs },
+  portionCard: { borderWidth: 1.5, borderRadius: Radius.sm, paddingVertical: 6, paddingHorizontal: 10, minWidth: '47%', flexGrow: 1 },
+  stepperContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: Radius.md, height: 48, overflow: 'hidden' },
+  stepperBtn: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center' },
+  stepperInput: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', paddingVertical: 0 },
+  resultBox: { alignItems: 'center', paddingVertical: Space.sm, borderRadius: Radius.md, borderWidth: 1, marginVertical: 2 },
 });

@@ -6,7 +6,17 @@ import { useSettings } from './settings';
 
 import { storage, uid } from './storage';
 
-export type CartItem = { id: string; foodId: string; name: string; grams: number; carbs: number; fatty?: boolean; meat?: boolean };
+export type CartItem = {
+  id: string;
+  foodId: string;
+  name: string;
+  grams: number;
+  carbs: number;
+  fatty?: boolean;
+  meat?: boolean;
+  portionLabel?: string;
+  portionGrams?: number;
+};
 export type SavedMeal = { id: string; name: string; items: CartItem[] };
 
 type State = {
