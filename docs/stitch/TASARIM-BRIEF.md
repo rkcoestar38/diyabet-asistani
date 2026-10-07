@@ -8,7 +8,7 @@ Bu dosya Google Stitch'e yapıştırmak için hazırlandı. Aynı klasördeki PN
 >
 > **Goals:** a first-time user must never feel lost: every screen says what it is for, the next action is obvious, big touch targets (min 48 px), strong contrast, no clutter. Safety information (low glucose, ketones, max dose) must be unmistakable but never panicky.
 >
-> **Style:** soft "sea glass" – misty green-grey background, deep ocean-ink text, one teal action colour, generous rounded corners (14–20 px), soft shadows in light mode, hairline borders instead of shadows in dark mode. Font: Figtree (or similar humanist sans), body 16 px, big tabular numbers for glucose values. Subtle motion only (springy press, count-up of dose number). Provide **light and dark** themes.
+> **Style:** soft "sea glass" – misty green-grey background, deep ocean-ink text, one teal action colour, generous rounded corners (14–20 px), soft shadows in light mode, hairline borders instead of shadows in dark mode. Font: Plus Jakarta Sans (or similar humanist sans), body 16 px, big tabular numbers for glucose values. Subtle motion only (springy press, count-up of dose number). Provide **light and dark** themes.
 >
 > **Colour roles (keep semantics strict):** Teal `#0B7A86` = brand / primary action only. **Glucose status is a separate scale used everywhere the same way:** in-range = green `#1F7A4D`, above target = amber `#8A5300`, low/hypo = coral red `#C23A2E`; info = blue `#1D5F8F`. Light bg `#EDF3F2`, card `#FFFFFF`, text `#10292D`, muted `#52686C`. Dark bg `#081417`, card `#0F2327`, primary `#4CC3CF`, text `#E8F3F3`.
 >

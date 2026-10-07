@@ -28,6 +28,12 @@ jobs:
       - name: Bağımlılıkları kur
         run: npm ci
 
+      - name: Lint, tür ve doz testleri
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+
       - name: Sürümü etiketten ayarla
         run: |
           node -e "

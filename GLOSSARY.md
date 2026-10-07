@@ -13,7 +13,7 @@ Yemekteki karbonhidratı karşılamak ve gerekiyorsa yüksek kan şekerini düze
 _Avoid_: Yemek insülini, kısa insülin
 
 **Bazal İnsülin**:
-Vücudun açlık durumundaki temel glukoz ihtiyacını karşılamak için günde bir kez sabit saat aralığında (20:30–02:00) uygulanan uzun etkili insülin.
+Vücudun açlık durumundaki temel glukoz ihtiyacını karşılamak için günde bir kez sabit bir saatte uygulanan uzun etkili insülin.
 _Avoid_: Gece insülini, uzun insülin
 
 **Şeker Ölçümü**:
