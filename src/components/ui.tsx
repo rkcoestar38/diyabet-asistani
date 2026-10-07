@@ -267,10 +267,14 @@ export function Field({
   const [focus, setFocus] = useState(false);
   const inRow = useContext(InRow);
   const nudge = (delta: number) => {
-    const cur = parseNum(value) ?? base;
+    const cur = parseNum(value) ?? base ?? (min ?? 0);
     let next = Math.round((cur + delta) * 100) / 100;
-    if (next < min) next = min;
-    if (max !== undefined && next > max) next = max;
+    if (min !== undefined && next < min) {
+      next = delta < 0 ? (cur <= min ? cur : min) : min;
+    }
+    if (max !== undefined && next > max) {
+      next = delta > 0 ? (cur >= max ? cur : max) : max;
+    }
     onChangeText(numToInput(next));
   };
   return (

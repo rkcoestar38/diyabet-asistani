@@ -101,7 +101,15 @@ export const useSettings = create<State>()(
           };
         }),
       addBlock: () =>
-        set((st) => ({ settings: { ...st.settings, blocks: [...st.settings.blocks, block('Yeni dilim', '12:00')] } })),
+        set((st) => {
+          const base = st.settings.blocks[st.settings.blocks.length - 1] ?? st.settings.blocks[0];
+          return {
+            settings: {
+              ...st.settings,
+              blocks: [...st.settings.blocks, block('Yeni dilim', '12:00', base)],
+            },
+          };
+        }),
       removeBlock: (id) =>
         set((st) =>
           st.settings.blocks.length <= 1

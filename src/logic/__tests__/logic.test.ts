@@ -1217,3 +1217,62 @@ describe('yedek hatırlatması', () => {
     expect(backupDue(30, undefined, NOWB - D, NOWB)).toBe(true);
   });
 });
+
+describe('porsiyon birimleri ve veri tabani (TURKOMP / TUBER)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const d = require('../../data/foods-tr') as typeof import('../../data/foods-tr');
+
+  it('tum besinlerin porsiyonlari ve kategorileri gecerlidir', () => {
+    expect(d.FOODS.length).toBeGreaterThan(50);
+    for (const food of d.FOODS) {
+      expect(food.id).toBeDefined();
+      expect(food.name).toBeDefined();
+      expect(food.carbsPer100).toBeGreaterThanOrEqual(0);
+      expect(food.portions.length).toBeGreaterThanOrEqual(1);
+      for (const p of food.portions) {
+        expect(p.grams).toBeGreaterThan(0);
+        const cat = d.getPortionCategory(p);
+        expect(['boyut', 'olcu', 'porsiyon', 'adet']).toContain(cat);
+      }
+    }
+  });
+
+  it('terazi ile ozel gram girildiginde net hesaplar', () => {
+    const elma = d.FOODS.find((f: any) => f.name === 'Elma')!;
+    expect(d.carbsFor(elma, 150, 'composition')).toBeCloseTo(18);
+  });
+});
+
+describe('nudge sinir mantigi (#1 duzeltmesi)', () => {
+  function testNudge(value: string, delta: number, min?: number, max?: number, base?: number) {
+    const parseNum = (s: string) => {
+      const v = Number(s.replace(',', '.'));
+      return isNaN(v) ? undefined : v;
+    };
+    const cur = parseNum(value) ?? base ?? (min ?? 0);
+    let next = Math.round((cur + delta) * 100) / 100;
+    if (min !== undefined && next < min) {
+      next = delta < 0 ? (cur <= min ? cur : min) : min;
+    }
+    if (max !== undefined && next > max) {
+      next = delta > 0 ? (cur >= max ? cur : max) : max;
+    }
+    return next;
+  }
+
+  it('deger 0 iken azalt butonuna basildiginda min=1 olsa bile 1 U yapmaz', () => {
+    expect(testNudge('0', -1, 1, 200, 0)).toBe(0);
+  });
+
+  it('deger 1 iken azalt butonuna basildiginda min=1 sinirinda kalir', () => {
+    expect(testNudge('1', -1, 1, 200, 0)).toBe(1);
+  });
+
+  it('deger 5 iken azalt butonuna basildiginda 4 olur', () => {
+    expect(testNudge('5', -1, 1, 200, 0)).toBe(4);
+  });
+
+  it('deger 0 iken artir butonuna basildiginda 1 olur', () => {
+    expect(testNudge('0', 1, 1, 200, 0)).toBe(1);
+  });
+});

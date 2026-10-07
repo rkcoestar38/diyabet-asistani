@@ -217,7 +217,7 @@ export default function Entry() {
       // Elle düzenlemede doz bileşenleri artık geçerli olmayabilir
       const changedDose = entry.bolus !== existing.bolus || entry.carbs !== existing.carbs || entry.bg !== existing.bg;
       update(existing.id, {
-        bg: undefined, carbs: undefined, bolus: undefined, basal: undefined, hypoCarbs: undefined, ketones: undefined,
+        bg: undefined, carbs: undefined, bolus: undefined, basal: undefined, hypoCarbs: existing.hypoCarbs, ketones: undefined,
         bgTime: undefined, items: undefined, foods: undefined, exercise: undefined, note: undefined,
         ...(changedDose ? { mealBolus: undefined, correctionBolus: undefined } : {}),
         ...entry,
