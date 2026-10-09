@@ -3,14 +3,14 @@ import { View } from 'react-native';
 
 import { Help, type GlossaryKey } from '@/components/guide';
 import { Chip } from '@/components/when';
-import { Btn, Card, Field, Notice, Row, Segmented, T, TimeField, Toggle, confirm, parseNum, useInRow } from '@/components/ui';
-import { parseTimeInput } from '@/lib/input';
+import { Btn, Card, Field, Notice, Row, Segmented, T, Toggle, confirm, parseNum, useInRow } from '@/components/ui';
 import { Space, useTheme } from '@/constants/theme';
 import { fmt } from '@/logic/bolus';
 import { estimateFromTdd } from '@/logic/ratios';
-import { LIMITS, activeBlock, blockEnd, inLimit, scheduleProblems, sortBlocks } from '@/logic/schedule';
+import { RATIO_MEALS } from '@/logic/meals';
+import { LIMITS, blockEnd, inLimit } from '@/logic/schedule';
 import type { TimeBlock } from '@/logic/types';
-import { isSingleBlock, useSettings } from '@/store/settings';
+import { useSettings } from '@/store/settings';
 
 /**
  * Sayı alanı. Yalnızca `min`–`max` aralığındaki değerler kaydedilir; yazarken oluşan
@@ -95,86 +95,43 @@ function RatioFields({ block, source }: { block: TimeBlock; source: string }) {
   );
 }
 
-function BlockCard({ block, blocks, source }: { block: TimeBlock; blocks: TimeBlock[]; source: string }) {
-  const updateBlock = useSettings((s) => s.updateBlock);
-  const removeBlock = useSettings((s) => s.removeBlock);
-  const [name, setName] = useState(block.name);
-  const [start, setStart] = useState(block.start);
-  return (
-    <Card
-      title={`${block.name}  ·  ${block.start}–${blockEnd(blocks, block)}`}
-      icon="time-outline"
-      right={
-        blocks.length > 1 ? (
-          <Btn
-            small
-            variant="ghost"
-            icon="trash-outline"
-            title="Sil"
-            onPress={() => confirm('Dilimi sil', `"${block.name}" silinsin mi?`, () => removeBlock(block.id), 'Sil')}
-          />
-        ) : null
-      }>
-      <Row>
-        <Field label="Ad" keyboard="text" value={name} onChangeText={(s) => { setName(s); updateBlock(block.id, { name: s }); }} />
-        <TimeField
-          label="Başlangıç saati"
-          value={start}
-          onChange={(v) => {
-            setStart(v);
-            if (parseTimeInput(v) !== undefined) updateBlock(block.id, { start: v });
-          }}
-        />
-      </Row>
-      <RatioFields block={block} source={source} />
-    </Card>
-  );
-}
-
 /**
- * Oranlarım: varsayılan olarak tüm gün için tek oran; istenirse saate göre farklı oranlar.
+ * Oranlarım: sabah, öğle ve akşam için ayrı oranlar. Ara öğünler ve gece kendinden önceki ana öğünün oranını kullanır.
+ * Öğünlerin başlangıç saatleri Ayarlar > Öğün saatleri'nden gelir.
  */
 export function RatioEditor({ source = 'Elle düzenleme' }: { source?: string }) {
   const blocks = useSettings((s) => s.settings.blocks);
-  const addBlock = useSettings((s) => s.addBlock);
-  const setTimeBlocks = useSettings((s) => s.setTimeBlocks);
-  const single = isSingleBlock(blocks);
-  const problems = scheduleProblems(blocks);
+  const updateBlock = useSettings((s) => s.updateBlock);
+  const meals = RATIO_MEALS.map((m) => ({ ...m, block: blocks.find((b) => b.meal === m.id) })).filter((m) => m.block);
+  const first = meals[0]?.block;
+  const same = (x: TimeBlock) => !!first && x.icr === first.icr && x.isf === first.isf && x.target === first.target && x.low === first.low && x.high === first.high;
+  const differs = meals.some((m) => !same(m.block!));
 
   return (
     <View style={{ gap: Space.md }}>
-      {single ? (
-        <Card title="Oranlarım (tüm gün)" icon="options-outline">
-          <RatioFields block={blocks[0]} source={source} />
+      {meals.map((m) => (
+        <Card key={m.id} title={`${m.name}  ·  ${m.block!.start}–${blockEnd(blocks, m.block!)}`} icon="restaurant-outline">
+          <T variant="small">{m.covers[0].toUpperCase() + m.covers.slice(1)} bu oranla hesaplanır.</T>
+          <RatioFields block={m.block!} source={source} />
         </Card>
-      ) : (
-        <>
-          <T variant="muted">
-            Her dilim, başlangıç saatinden bir sonraki dilimin başlangıcına kadar geçerlidir. Son dilim gece yarısını geçip ilk dilime kadar sürer.
-          </T>
-          {sortBlocks(blocks).map((b) => (
-            <BlockCard key={b.id} block={b} blocks={blocks} source={source} />
-          ))}
-          <Btn variant="secondary" icon="add" title="Saat dilimi ekle" onPress={addBlock} />
-        </>
-      )}
-      {problems.map((p) => (
-        <Notice key={p} level="danger" text={p} />
       ))}
-      <Toggle
-        label="Günün saatine göre farklı oranlar kullanıyorum (ör. sabah daha güçlü)"
-        value={!single}
-        onChange={(on) => {
-          if (on) setTimeBlocks(true);
-          else
+      {first && differs ? (
+        <Btn
+          small
+          variant="ghost"
+          icon="copy-outline"
+          title="Sabah oranlarını öğle ve akşama da uygula"
+          onPress={() =>
             confirm(
-              'Tek orana geç',
-              'Saat dilimleri silinecek; şu an geçerli dilimin oranları tüm güne uygulanacak.',
-              () => setTimeBlocks(false, activeBlock(blocks, new Date())),
-              'Tek orana geç',
-            );
-        }}
-      />
+              'Oranları kopyala',
+              `Öğle ve akşam için de 1 Ü = ${fmt(first.icr)} g, düzeltme ${fmt(first.isf)} mg/dL, hedef ${first.target} mg/dL olacak.`,
+              () => meals.slice(1).forEach((m) => updateBlock(m.block!.id, { icr: first.icr, isf: first.isf, target: first.target, low: first.low, high: first.high }, source)),
+              'Uygula',
+            )
+          }
+        />
+      ) : null}
+      <T variant="small">Öğünlerin başlangıç saatlerini Ayarlar &gt; Öğün saatleri bölümünden değiştirebilirsin.</T>
     </View>
   );
 }

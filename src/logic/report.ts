@@ -63,10 +63,10 @@ export type RangeStats = ReturnType<typeof computeStats> & {
  * (aralıkta en az bir tamamlanmış gün varsa); böylece sabah bakıldığında ortalamalar düşük çıkmaz.
  */
 export function rangeStats(entries: LogEntry[], settings: Settings, now = Date.now()): RangeStats {
-  const s = computeStats(entries, settings.blocks, settings.hypoThreshold);
+  const s = computeStats(entries, settings.blocks, settings.hypoThreshold, { ...settings, all: entries });
   const today = startOfDay(now);
   const complete = entries.filter((e) => e.time < today);
-  const basis = complete.length > 0 ? computeStats(complete, settings.blocks, settings.hypoThreshold) : s;
+  const basis = complete.length > 0 ? computeStats(complete, settings.blocks, settings.hypoThreshold, { ...settings, all: entries }) : s;
   const d = Math.max(basis.days, 1);
   return {
     ...s,
@@ -128,10 +128,12 @@ export function mealStats(entries: LogEntry[], settings: Settings): MealStat[] {
 export function groupByDay(entries: LogEntry[]): { day: number; entries: LogEntry[] }[] {
   const map = new Map<number, LogEntry[]>();
   for (const e of [...entries].sort((a, b) => a.time - b.time)) {
-    const k = startOfDay(e.time);
-    map.set(k, [...(map.get(k) ?? []), e]);
+    const d = startOfDay(e.time);
+    const list = map.get(d) ?? [];
+    list.push(e);
+    map.set(d, list);
   }
-  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([day, es]) => ({ day, entries: es }));
+  return Array.from(map.entries()).map(([day, entries]) => ({ day, entries }));
 }
 
 const TR_DAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
@@ -170,15 +172,17 @@ export function chartSvg(entries: LogEntry[], settings: Settings, from: number, 
     };
     const parts: string[] = [];
 
-    // hedef aralık bandı (saat dilimlerine göre) ve gün ayraçları
+    // hedef aralık bandı ve gün ayraçları
     chunk.forEach((day, k) => {
       const x0 = pad.l + k * dw;
       blocks.forEach((blk) => {
         const [sh, sm] = blk.start.split(':').map(Number);
         const [eh, em] = blockEnd(settings.blocks, blk).split(':').map(Number);
         const bs = sh * 60 + sm;
-        let be = eh * 60 + em;
-        if (be <= bs) be = 1440;
+        const be0 = eh * 60 + em;
+        // Gece yarısını saran blok (ör. akşam 18:30 → sabah 06:00): bitişi ertesi gün say,
+        // toDayAxis bunu gün ekseni boyunca (gün başına kadar) tek parçaya çevirir
+        const be = be0 <= bs ? be0 + 1440 : be0;
         for (const [a, b] of toDayAxis(bs, be)) {
           const bx1 = x0 + (a / 1440) * dw;
           const bx2 = x0 + (b / 1440) * dw;
@@ -187,7 +191,7 @@ export function chartSvg(entries: LogEntry[], settings: Settings, from: number, 
       });
       parts.push(`<line x1="${x0.toFixed(1)}" x2="${x0.toFixed(1)}" y1="${pad.t}" y2="${pad.t + ph}" stroke="#b9c9c7"/>`);
       const d = new Date(day);
-      parts.push(`<text x="${(x0 + dw / 2).toFixed(1)}" y="${pad.t + ph + 15}" font-size="10" font-weight="bold" fill="#10292d" text-anchor="middle">${d.getDate()} ${TR_MONTHS_SHORT[d.getMonth()]} ${TR_DAYS[d.getDay()]}</text>`);
+      parts.push(`<text x="${(x0 + dw / 2).toFixed(1)}" y="${pad.t + ph + 15}" font-size=\"10\" font-weight=\"bold\" fill=\"#10292d\" text-anchor=\"middle\">${d.getDate()} ${TR_MONTHS_SHORT[d.getMonth()]} ${TR_DAYS[d.getDay()]}</text>`);
       // saat çizgileri
       const step = n === 1 ? 3 : n === 2 ? 6 : n <= 4 ? 12 : 0;
       if (step) {
@@ -199,21 +203,27 @@ export function chartSvg(entries: LogEntry[], settings: Settings, from: number, 
       }
     });
     parts.push(`<line x1="${(pad.l + pw).toFixed(1)}" x2="${(pad.l + pw).toFixed(1)}" y1="${pad.t}" y2="${pad.t + ph}" stroke="#b9c9c7"/>`);
-    for (const v of [70, 180, 250]) {
+    for (const v of [70, 80, 120, 180, 250]) {
+      const isTarget = v === 80 || v === 180;
+      const isHypo = v === 70;
+      const stroke = isHypo ? '#c23a2e' : isTarget ? '#2e9e6b' : '#cbd5d3';
       parts.push(
-        `<line x1="${pad.l}" x2="${pad.l + pw}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 70 ? '#c23a2e' : '#cbd5d3'}" stroke-dasharray="4 4"/><text x="${pad.l - 5}" y="${y(v) + 3}" font-size="9" text-anchor="end" fill="#52686c">${v}</text>`,
+        `<line x1="${pad.l}" x2="${pad.l + pw}" y1="${y(v)}" y2="${y(v)}" stroke="${stroke}" stroke-dasharray="4 4"/><text x="${pad.l - 5}" y="${y(v) + 3}" font-size="9" text-anchor="end" fill="${stroke}">${v}</text>`,
       );
     }
 
-    // her günün çizgisi ayrı çizilir (günler arası uzun çizgi olmasın)
+    // her günün çizgisi ayrı çizilir
     chunk.forEach((day) => {
       const dayBgs = bgs.filter((e) => startOfDay(e.bgTime ?? e.time) === day);
       const path = dayBgs.map((e, k) => `${k ? 'L' : 'M'}${x(e.bgTime ?? e.time).toFixed(1)},${y(e.bg!).toFixed(1)}`).join(' ');
       parts.push(`<path d="${path}" fill="none" stroke="#0b7a86" stroke-width="1.6" opacity="0.75"/>`);
       dayBgs.forEach((e) => {
         const cx = x(e.bgTime ?? e.time);
-        const col = e.bg! < settings.hypoThreshold ? '#c23a2e' : e.bg! > 180 ? '#b87400' : '#0b7a86';
-        parts.push(`<circle cx="${cx.toFixed(1)}" cy="${y(e.bg!).toFixed(1)}" r="3" fill="${col}"/>`);
+        const t = e.bgTime ?? e.time;
+        const isPost = e.post || inRange.some((m) => (m.carbs ?? 0) > 0 && m.time < t && t - m.time <= 180 * 60000);
+        const inOk = isPost ? (e.bg! >= settings.postRange.low && e.bg! <= settings.postRange.high) : (e.bg! >= settings.fastingRange.low && e.bg! <= settings.fastingRange.high);
+        const col = inOk ? '#15803d' : '#c23a2e';
+        parts.push(`<circle cx="${cx.toFixed(1)}" cy="${y(e.bg!).toFixed(1)}" r="3.5" fill="${col}"/>`);
         if (detail) parts.push(`<text x="${cx.toFixed(1)}" y="${(y(e.bg!) - 7).toFixed(1)}" font-size="8.5" fill="${col}" text-anchor="middle" font-weight="bold">${e.bg}</text>`);
       });
     });
@@ -344,7 +354,10 @@ export function buildReportHtml({
         .join(' · ')}</div>`;
       const rows = es
         .map((e) => {
-          const bgCls = e.bg === undefined ? '' : e.bg < settings.hypoThreshold ? 'lo' : (() => { const b = activeBlock(settings.blocks, new Date(e.bgTime ?? e.time)); return b && e.bg > b.high ? 'hi' : ''; })();
+          const t = e.bgTime ?? e.time;
+          const isPost = e.post || inRange.some((m) => (m.carbs ?? 0) > 0 && m.time < t && t - m.time <= 180 * 60000);
+          const inOk = isPost ? (e.bg !== undefined && e.bg >= settings.postRange.low && e.bg <= settings.postRange.high) : (e.bg !== undefined && e.bg >= settings.fastingRange.low && e.bg <= settings.fastingRange.high);
+          const bgCls = e.bg === undefined ? '' : inOk ? 'ok' : 'lo';
           const food = foodLines(e);
           const mealName = MEALS.find((m) => m.id === entryMeal(e, settings.mealStarts))?.short ?? '';
           const measured = e.bg === undefined ? '' : e.bgTime && e.time - e.bgTime >= 5 * 60000 ? timeLabel(e.bgTime) : '<span class="same">aynı</span>';
@@ -369,54 +382,57 @@ export function buildReportHtml({
     ? `
 <h2>Özet</h2>
 <div class="stats">
-${stat('Ortalama şeker (mg/dL)', st.avg !== undefined ? String(st.avg) : '—')}
-${stat('Hedef aralıkta', pct(st.inRange))}
-${stat('Hedefin altında', pct(st.below))}
-${stat('Hedefin üstünde', pct(st.above))}
-${stat('Ölçüm sayısı (en düşük–en yüksek)', st.readings ? `${st.readings} (${st.min}–${st.max})` : '—')}
-${stat('Tahmini HbA1c (GMI)', st.gmi !== undefined && st.readings >= 5 ? `%${st.gmi}` : '—')}
-${stat('Değişkenlik: SS / CV', st.sd !== undefined ? `${st.sd} / %${st.cv ?? '—'}` : '—')}
-${stat('Hipo atağı', String(st.hypos))}
-${stat('Günlük karbonhidrat (ort.)', st.avgCarbsPerDay !== undefined ? `${st.avgCarbsPerDay} g` : '—')}
-${stat(st.avgBasalPerDay === 0 && settings.basalDose ? 'Günlük hızlı insülin (bazal kaydı yok)' : 'Günlük toplam insülin (ort.)', st.avgTotalPerDay !== undefined ? `${fmt(st.avgTotalPerDay)} Ü` : '—')}
-${stat('Günlük hızlı insülin (ort.)', st.avgBolusPerDay !== undefined ? `${fmt(st.avgBolusPerDay)} Ü` : '—')}
-${st.avgBasalPerDay === 0 && settings.basalDose ? stat('Bazal', `kayıt yok · ayarlı ${fmt(settings.basalDose)} Ü`) : stat('Günlük bazal (ort.)', st.avgBasalPerDay !== undefined ? `${fmt(st.avgBasalPerDay)} Ü` : '—')}
+  ${stat('Ortalama şeker', st.avg !== undefined ? `${st.avg} mg/dL` : '—')}
+  ${stat(`Hedef aralıkta (Aç ${settings.fastingRange.low}-${settings.fastingRange.high} / Tok ${settings.postRange.low}-${settings.postRange.high})`, pct(st.inRange))}
+  ${stat('Hedefin altında', pct(st.below))}
+  ${stat('Hedefin üstünde', pct(st.above))}
+  ${stat('Hipo olayları', `${st.hypos}`)}
+  ${stat('Tahmini HbA1c (GMI)', st.gmi !== undefined ? `%${st.gmi}` : '—')}
+  ${stat('Değişkenlik (CV)', st.cv !== undefined ? `%${st.cv}` : '—')}
+  ${stat('Standart sapma (SD)', st.sd !== undefined ? `±${st.sd}` : '—')}
+  ${stat('Günlük KH (ort.)', st.avgCarbsPerDay !== undefined ? `${st.avgCarbsPerDay} g` : '—')}
+  ${stat('Günlük hızlı insülin (ort.)', st.avgBolusPerDay !== undefined ? `${fmt(st.avgBolusPerDay)} Ü` : '—')}
+  ${stat('Günlük bazal (ort.)', st.avgBasalPerDay !== undefined ? `${fmt(st.avgBasalPerDay)} Ü` : '—')}
+  ${stat('Günlük toplam insülin (ort.)', st.avgTotalPerDay !== undefined ? `${fmt(st.avgTotalPerDay)} Ü` : '—')}
 </div>
-${st.readings ? `<div class="tir"><div style="width:${st.below ?? 0}%;background:#c23a2e"></div><div style="width:${st.inRange ?? 0}%;background:#2e9e6b"></div><div style="width:${st.above ?? 0}%;background:#e0a02e"></div></div><div class="tirl"><span>Hedefin altı %${st.below ?? 0}</span><span>Hedef aralık %${st.inRange ?? 0}</span><span>Hedefin üstü %${st.above ?? 0}</span></div>` : ''}
-`
+${
+  st.readings > 0
+    ? `<div class="tir"><div style="flex:${st.below ?? 0};background:#c23a2e"></div><div style="flex:${st.inRange ?? 0};background:#2e9e6b"></div><div style="flex:${st.above ?? 0};background:#b87400"></div></div><div class="tirl"><span>Hedef altı: ${pct(st.below)}</span><span>Aralıkta: ${pct(st.inRange)}</span><span>Hedef üstü: ${pct(st.above)}</span></div>`
+    : ''
+}`
     : '';
 
   const observationsHtmlContent = sec.observations ? observationsHtml(inRange, settings) : '';
 
   const mealsHtmlContent =
     sec.meals && mealRows
-      ? `<h2>Öğünlere göre özet</h2><table class="meals"><thead><tr><th>Öğün</th><th>Kayıt</th><th>Öğün öncesi (açlık) ort.</th><th>Tokluk ort.</th><th>Tokluk − açlık (çift)</th><th>Tüm ölçümler ort.</th><th>Ort. karbonhidrat</th><th>Ort. hızlı insülin</th><th>Hipo</th></tr></thead><tbody>${mealRows}</tbody></table>`
+      ? `
+<h2>Öğünlere göre özet</h2>
+<table class="meals">
+<thead><tr><th>Öğün</th><th>Kayıt</th><th>Öğün öncesi</th><th>Tokluk</th><th>Fark</th><th>Ort. şeker</th><th>Ort. KH</th><th>Ort. hızlı</th><th>Hipo</th></tr></thead>
+<tbody>${mealRows}</tbody>
+</table>`
       : '';
 
   const ratiosHtmlContent = sec.ratios
     ? `
 <h2>Kullanılan oranlar ve insülinler</h2>
-<table><thead><tr><th>Saat dilimi</th><th>Karbonhidrat oranı</th><th>Düzeltme faktörü</th><th>Hedef (mg/dL)</th><th>Hedef aralık</th></tr></thead><tbody>${ratioRows}</tbody></table>
-<div class="sub" style="margin-top:6px">Hızlı insülin: ${esc(settings.rapidName || 'adı girilmedi')} (etki süresi ${fmt(settings.dia)} sa, kalem adımı ${fmt(settings.penStep)} Ü)${settings.basalName || settings.basalDose ? ` · Bazal: ${esc(settings.basalName || '—')}${settings.basalDose ? ` ${fmt(settings.basalDose)} Ü` : ''}${settings.basalTime ? `, saat ${esc(settings.basalTime)}` : ''}` : ''}</div>
-${changes ? `<div class="sub">Bu aralıkta yapılan oran değişiklikleri:</div><ul>${changes}</ul>` : ''}
-`
+<table class="ratios">
+<thead><tr><th>Zaman dilimi</th><th>KHO</th><th>İSF</th><th>Hedef (mg/dL)</th><th>Aralık (mg/dL)</th></tr></thead>
+<tbody>${ratioRows}</tbody>
+</table>
+
+${changes ? `<h3>Dönem içindeki oran değişiklikleri</h3><ul>${changes}</ul>` : ''}`
     : '';
 
-  const analysisHtmlContent = sec.analysis ? analysisHtml({ entries, settings, now: Math.min(to, generatedAt), basalTests }) : '';
+  const analysisHtmlContent = sec.analysis ? analysisHtml({ entries: inRange, settings, now: to, basalTests }) : '';
+  const chartHtmlContent = sec.chart && svg ? `<h2>Şeker grafiği</h2>${svg}` : '';
+  const dailyLogsHtmlContent = sec.dailyLogs ? `<h2>Günlük kayıtlar (ölçüm, yemek ve insülin saatleriyle)</h2>${days || "<p>Bu aralıkta kayıt yok.</p>"}` : "";
 
-  const chartHtmlContent = sec.chart && svg ? `<h2>Şeker grafiği</h2>${svg}<div class="sub">Yeşil bant: hedef aralık · kırmızı çizgi: ${settings.hypoThreshold} mg/dL</div>` : '';
-
-  const dailyLogsHtmlContent = sec.dailyLogs
-    ? `<h2>Günlük kayıtlar (ölçüm, yemek ve insülin saatleriyle)</h2>${days || '<p>Bu aralıkta kayıt yok.</p>'}`
-    : '';
-
-  return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Diyabet raporu</title>
-<style>
-@page { size: A4; margin: 14mm; }
-* { box-sizing: border-box; }
-body { font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #10292d; font-size: 11px; line-height: 1.4; margin: 0; }
-h1 { font-size: 20px; margin: 0 0 2px; color: #085e68; }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Diyabet raporu</title><style>
+@page { size: A4 portrait; margin: 12mm 10mm; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 10px; line-height: 1.35; color: #10292d; margin: 0; padding: 12px; }
+h1 { font-size: 18px; margin: 0 0 2px; color: #085e68; }
 h2 { font-size: 13px; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #0b7a86; color: #085e68; }
 h3 { font-size: 12px; margin: 12px 0 2px; }
 .sub { color: #52686c; margin-bottom: 8px; }
@@ -431,7 +447,9 @@ table.log td:nth-child(3), table.log td:nth-child(5), table.log td:nth-child(7),
 table.log th:nth-child(3), table.log th:nth-child(5), table.log th:nth-child(7), table.log th:nth-child(8) { text-align: right; }
 table.log td:nth-child(1), table.log td:nth-child(2), table.log td:nth-child(4) { white-space: nowrap; }
 table.meals td:not(:first-child), table.meals th:not(:first-child) { text-align: right; }
-.lo { color: #c23a2e; font-weight: 700; } .hi { color: #b87400; font-weight: 700; }
+.ok { color: #15803d; font-weight: 700; }
+.lo { color: #c23a2e; font-weight: 700; }
+.hi { color: #c23a2e; font-weight: 700; }
 .day { break-inside: avoid; } .daysum { color: #52686c; margin-bottom: 3px; }
 ul { margin: 4px 0 0 16px; padding: 0; }
 .same { color: #9aabae; }

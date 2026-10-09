@@ -9,9 +9,8 @@ import { Btn, Card, Row, Screen, Segmented, T } from '@/components/ui';
 import { Radius, Space, useTheme, type Palette } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { computeStats, entriesBetween, startOfDay, bgLevel, type Stats } from '@/logic/stats';
-import { activeBlock } from '@/logic/schedule';
-import { MEALS, entryMeal } from '@/logic/meals';
+import { bgLevelIn, computeStats, entriesBetween, rangeFor, startOfDay, type Stats } from '@/logic/stats';
+import { entryMeal, mealLabel } from '@/logic/meals';
 import { postOf } from '@/logic/postmeal';
 import type { LogEntry } from '@/logic/types';
 import { useLog } from '@/store/log';
@@ -41,18 +40,30 @@ export default function Log() {
   const dim = new Date(wk.y, wk.m + 1, 0).getDate();
   const weekCount = Math.ceil(dim / 7);
   const weekStartDate = (i: number) => 1 + 7 * i;
-  const weekSpan = (i: number) => Math.min(7, dim - 7 * i);
+  const calendarWeekSpan = (i: number) => Math.min(7, dim - 7 * i);
   const weekStart = (i: number) => logicalDay(wk.y, wk.m, weekStartDate(i));
   const weeksShown = Array.from({ length: weekCount }, (_, i) => i).filter((i) => weekStart(i) <= today);
 
-  const span = view === 'day' ? 1 : weekSpan(wk.i);
-  const from = view === 'day' ? day : weekStart(wk.i);
+  // Seçili haftanın takvim başlangıcı ve sonu
+  const wStart = weekStart(wk.i);
+  const calSpan = calendarWeekSpan(wk.i);
+  const calEnd = wStart + (calSpan - 1) * DAY;
+
+  // Kullanıcı kuralı: Henüz veri olmayan gelecek boş günler görünmesin!
+  // Eğer bu hafta halen devam ediyorsa (veya günümüzdeysek), sadece bugüne (today) kadar olan günleri göster.
+  // Gün ilerledikçe (yarın olduğunda) yeni gün de grafikte yerini alır.
+  const visibleLastDay = Math.min(calEnd, today);
+  const activeWeekSpan = Math.max(1, Math.round((visibleLastDay - wStart) / DAY) + 1);
+
+  const span = view === 'day' ? 1 : activeWeekSpan;
+  const from = view === 'day' ? day : wStart;
   const last = from + (span - 1) * DAY;
   const dayEntries = entriesBetween(entries, from, last + DAY);
-  const dayStats = computeStats(dayEntries, settings.blocks, settings.hypoThreshold);
+  const ranges = { fastingRange: settings.fastingRange, postRange: settings.postRange, all: entries };
+  const dayStats = computeStats(dayEntries, settings.blocks, settings.hypoThreshold, ranges);
   const shortDate = (t: number) => new Date(t).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
   const periodDays = Number(period);
-  const periodStats = computeStats(entriesBetween(entries, today - (periodDays - 1) * DAY, today + DAY), settings.blocks, settings.hypoThreshold);
+  const periodStats = computeStats(entriesBetween(entries, today - (periodDays - 1) * DAY, today + DAY), settings.blocks, settings.hypoThreshold, ranges);
 
   const monthName = new Date(wk.y, wk.m, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
   const curMonth = new Date(today);
@@ -106,24 +117,30 @@ export default function Log() {
             ))}
           </View>
           <T variant="small">
-            Ayın {weekStartDate(wk.i)}–{weekStartDate(wk.i) + weekSpan(wk.i) - 1}. günleri · {shortDate(from)} – {shortDate(last)}
+            {span === 1
+              ? `Ayın ${weekStartDate(wk.i)}. günü · ${shortDate(from)}`
+              : `Ayın ${weekStartDate(wk.i)}–${weekStartDate(wk.i) + span - 1}. günleri · ${shortDate(from)} – ${shortDate(last)}`}
+            {activeWeekSpan < calSpan ? ' (devam ediyor)' : ''}
           </T>
         </View>
       ) : null}
 
       <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="analytics" size={20} color={c.primary} />
-            <T variant="h2" style={{ fontWeight: '800' }}>
-              Glikoz trendi
-            </T>
-          </View>
-          <T variant="small">
-            Hedef: {settings.blocks[0]?.low}–{settings.blocks[0]?.high}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="analytics" size={20} color={c.primary} />
+          <T variant="h2" style={{ fontWeight: '800' }}>
+            Glikoz trendi
           </T>
         </View>
-        <BgChart entries={dayEntries} blocks={settings.blocks} dayStart={from} days={span} hypo={settings.hypoThreshold} />
+        <BgChart
+          entries={dayEntries}
+          all={entries}
+          ranges={settings}
+          dayStart={from}
+          days={span}
+          hypo={settings.hypoThreshold}
+          isWeek={view === 'week'}
+        />
         <StatGrid s={dayStats} perDay={span > 1 ? Math.max(dayStats.days, 1) : undefined} dayCount={span > 1 ? dayStats.days : undefined} />
         {dayStats.readings > 0 ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: dayStats.hypos ? c.dangerBg : c.okBg, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
@@ -141,12 +158,12 @@ export default function Log() {
       </Row>
       <Btn variant="secondary" icon="document-text-outline" title="Doktor raporu (PDF)" onPress={() => router.push('/report' as Href)} />
 
-      {span === 1 ? (
+      {view === 'day' ? (
         <Card title="Günün kayıtları" icon="list" right={<T variant="small">{dayEntries.length} giriş</T>}>
           {dayEntries.length === 0 ? (
             <T variant="muted">Bu gün için kayıt yok.</T>
           ) : (
-            [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} hasPost={!!postOf(entries, e)} />)
+            [...dayEntries].reverse().map((e) => <EntryRow key={e.id} e={e} />)
           )}
         </Card>
       ) : (
@@ -173,7 +190,7 @@ export default function Log() {
           value={period}
           onChange={setPeriod}
         />
-        <StatGrid s={periodStats} perDay={Math.max(periodStats.days,1)} dayCount={periodStats.days} />
+        <StatGrid s={periodStats} perDay={Math.max(periodStats.days, 1)} dayCount={periodStats.days} />
         <T variant="small">
           Uluslararası hedef: ölçümlerin %70’inden fazlası aralıkta, %4’ünden azı 70 altında. (Parmak ucu ölçümleri sürekli sensör kadar kesin
           değildir.)
@@ -188,7 +205,7 @@ function DayTable({ entries, from, days, onPick }: { entries: LogEntry[]; from: 
   const c = useTheme();
   const settings = useSettings((s) => s.settings);
   const rows = Array.from({ length: days }, (_, i) => from + (days - 1 - i) * DAY)
-    .map((d) => ({ d, s: computeStats(entriesBetween(entries, d, d + DAY), settings.blocks, settings.hypoThreshold) }))
+    .map((d) => ({ d, s: computeStats(entriesBetween(entries, d, d + DAY), settings.blocks, settings.hypoThreshold, { ...settings, all: entries }) }))
     .filter((r) => r.s.readings > 0 || r.s.carbs > 0 || r.s.bolus > 0);
   if (rows.length === 0) return <T variant="muted">Bu aralıkta kayıt yok.</T>;
   const cell = { fontVariant: ['tabular-nums' as const] };
@@ -249,75 +266,115 @@ function StatGrid({ s, perDay, dayCount }: { s: Stats; perDay?: number; dayCount
           </T>
         </View>
       ))}
-      <T variant="small" style={{ width: '100%' }}>
-        {dayCount !== undefined ? `${dayCount} günün kaydı · ` : ''}{s.readings} ölçüm{s.min !== undefined ? ` · en düşük ${s.min} · en yüksek ${s.max}` : ''}
-      </T>
+      {dayCount !== undefined && dayCount > 0 ? (
+        <T variant="small" color="muted" style={{ width: '100%', textAlign: 'right' }}>
+          {dayCount} günün kaydı
+        </T>
+      ) : null}
     </View>
   );
 }
 
-function EntryRow({ e, hasPost }: { e: LogEntry; hasPost: boolean }) {
+function EntryRow({ e }: { e: LogEntry }) {
   const c = useTheme();
-  const starts = useSettings((s) => s.settings.mealStarts);
-  const meal = MEALS.find((m) => m.id === entryMeal(e, starts));
-  const parts: string[] = [];
-  if (e.post) parts.push('Tokluk');
-  if (e.carbs) parts.push(`${fmt(e.carbs)} g KH`);
-  if (e.bolus) parts.push(`${fmt(e.bolus)} Ü hızlı`);
-  if (e.basal) parts.push(`${fmt(e.basal)} Ü bazal`);
-  if (e.hypoCarbs) parts.push(`Hipo: ${e.hypoCarbs} g`);
-  if (e.ketones !== undefined) parts.push(`Keton ${fmt(e.ketones)}`);
-  if (e.exercise && e.exercise !== 'none') parts.push(exerciseTr[e.exercise]);
-  const hypo = useSettings((s) => s.settings.hypoThreshold);
-  const blocks = useSettings((s) => s.settings.blocks);
-  const bgColor = e.bg === undefined ? 'muted' : bgLevel(e.bg, activeBlock(blocks, new Date(e.bgTime ?? e.time)), hypo);
-  const row = (
+  const settings = useSettings((s) => s.settings);
+  const entries = useLog((s) => s.entries);
+  const post = postOf(entries, e);
+  const timeStr = new Date(e.time).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const meal = entryMeal(e, settings.mealStarts);
+  const mLabel = mealLabel(meal);
+  const range = rangeFor(e, entries, settings);
+  const lvl = e.bg !== undefined ? bgLevelIn(e.bg, range, settings.hypoThreshold) : undefined;
+  const isHypo = lvl === 'danger' && e.bg !== undefined && e.bg < settings.hypoThreshold;
+  // Açlık bağlamı: bu ölçüm açlık aralığıyla mı değerlendirildi (tokluk penceresi dışında mı)
+  const isFasting = e.bg !== undefined && range.low === settings.fastingRange.low && range.high === settings.fastingRange.high;
+  const gapHours = post ? ((post.time - e.time) / 3600000).toFixed(1) : undefined;
+  const delta = post?.bg !== undefined && e.bg !== undefined ? post.bg - e.bg : undefined;
+
+  return (
     <Pressable
       onPress={() => router.push({ pathname: '/entry', params: { id: e.id } })}
-      style={({ pressed }) => [styles.entry, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}>
-      <View style={{ width: 62 }}>
-        <T variant="muted">{new Date(e.time).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</T>
-        {meal ? (
-          <T variant="small" color="primary" numberOfLines={1}>
-            {meal.short}
+      style={({ pressed }) => [
+        styles.entryRow,
+        {
+          borderColor: isHypo ? c.danger : c.border,
+          backgroundColor: isHypo ? c.dangerBg : c.card,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}>
+      <View style={{ flex: 1, gap: Space.xxs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space.xs }}>
+          <T style={{ fontWeight: '700' }}>{timeStr}</T>
+          <T color="muted">·</T>
+          <T color="muted">{mLabel}</T>
+          {isFasting ? (
+            <View style={{ backgroundColor: c.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <T variant="small" color="primary">
+                Açlık
+              </T>
+            </View>
+          ) : null}
+        </View>
+        {e.note ? <T variant="small" color="muted">{e.note}</T> : null}
+        {e.exercise && e.exercise !== 'none' ? <T variant="small" color="muted">{exerciseTr[e.exercise]}</T> : null}
+        {post && post.bg !== undefined ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="timer-outline" size={14} color={c.muted} />
+            <T variant="small" color="muted">
+              {gapHours} sa sonra: {post.bg} mg/dL {delta !== undefined ? `(${delta > 0 ? `+${delta}` : delta})` : ''}
+            </T>
+          </View>
+        ) : !e.post && meal !== 'gece' && !meal.includes('Ara') ? (
+          <T variant="small" color="warn">
+            Tokluk ölçümü eksik
           </T>
         ) : null}
-        {e.bgTime ? <T variant="small">ölç. {new Date(e.bgTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</T> : null}
       </View>
-      <View style={[styles.bgPill, { backgroundColor: c.bg }]}>
-        <T style={{ fontWeight: '700' }} color={bgColor}>
-          {e.bg ?? '—'}
-        </T>
-      </View>
-      <View style={{ flex: 1 }}>
-        <T>{parts.join(' · ') || (e.bg !== undefined ? 'Ölçüm' : 'Not')}</T>
-        {e.foods || e.note ? (
-          <T variant="small" numberOfLines={2}>
-            {[e.foods, e.note].filter(Boolean).join(' — ')}
+      <View style={{ alignItems: 'flex-end', gap: Space.xxs }}>
+        {e.bg !== undefined ? (
+          <T variant="h2" color={lvl} style={{ fontWeight: '800' }}>
+            {e.bg}
           </T>
         ) : null}
+        <View style={{ flexDirection: 'row', gap: Space.xs }}>
+          {e.bolus ? <T variant="small" color="primary">{`${fmt(e.bolus)} Ü`}</T> : null}
+          {e.carbs ? <T variant="small" color="warn">{`${e.carbs}g KH`}</T> : null}
+        </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={c.muted} />
     </Pressable>
-  );
-  if (!e.carbs || e.post || hasPost) return row;
-  return (
-    <View>
-      {row}
-      <Pressable onPress={() => router.push({ pathname: '/entry', params: { after: e.id } })} hitSlop={6} style={{ paddingVertical: 6, paddingLeft: 62 + Space.sm }}>
-        <T variant="small" color="primary" style={{ fontWeight: '600' }}>
-          + Tokluk şekeri ekle
-        </T>
-      </Pressable>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 9 },
-  dayNav: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
-  stat: { flexGrow: 1, flexBasis: '22%', minWidth: 75, borderRadius: Radius.md, padding: Space.sm },
-  entry: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  bgPill: { minWidth: 52, alignItems: 'center', borderRadius: Radius.sm, paddingVertical: 4 },
+  dayNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Space.xs,
+  },
+  tRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: Space.xs,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Space.sm,
+  },
+  stat: {
+    flexGrow: 1,
+    minWidth: '45%',
+    padding: Space.sm,
+    borderRadius: Radius.md,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Space.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
 });

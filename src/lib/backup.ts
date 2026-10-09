@@ -3,12 +3,19 @@ import { useBackup } from '@/store/backup';
 import { useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
+import { useTests } from '@/store/tests';
 
 import { shareText } from './files';
 
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 
-/** Tüm verilerin JSON yedeği (ayarlar, günlük, kendi yemekler, oran geçmişi) */
+/** Yerel tarihle yyyy-mm-dd üretir (toISOString UTC olduğu için doğrudan kullanılmaz) */
+function localDay(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Tüm verilerin JSON yedeği (ayarlar, günlük, kendi yemekler, oran geçmişi, oran testleri) */
 export function buildBackup() {
   return {
     app: 'diyabet-asistani',
@@ -22,6 +29,10 @@ export function buildBackup() {
       favorites: useFoods.getState().favorites,
       meals: useFoods.getState().meals,
     },
+    tests: {
+      active: useTests.getState().active,
+      finished: useTests.getState().finished,
+    },
   };
 }
 
@@ -29,7 +40,7 @@ export function buildBackup() {
 export async function backupNow(): Promise<boolean> {
   const data = buildBackup();
   try {
-    await shareText(`diyabet-yedek-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json');
+    await shareText(`diyabet-yedek-${localDay(Date.now())}.json`, JSON.stringify(data, null, 1), 'application/json');
     useBackup.getState().markDone();
     return true;
   } catch (e) {

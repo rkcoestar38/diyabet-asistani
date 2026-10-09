@@ -26,6 +26,17 @@ export type BgCheck =
   | { kind: 'invalid'; warnings: Warning[] }
   | { kind: 'hypo'; severe: boolean; warnings: Warning[] };
 
+/** Hipo sınırının hemen üstü: düşük sayılmaz ama dikkat ister */
+export const CAUTION_BG = 80;
+
+export function isCaution(bg: number, s: Pick<Settings, 'hypoThreshold'>): boolean {
+  return bg >= s.hypoThreshold && bg < Math.max(CAUTION_BG, s.hypoThreshold);
+}
+
+export function cautionText(bg: number): string {
+  return `Şekerin ${bg} mg/dL, düşüğe yakın. Aktif insülin varsa düşebilir; 15–30 dk sonra tekrar ölç. Araç kullanmadan veya egzersizden önce bir şey ye.`;
+}
+
 export function checkBg(bg: number | undefined, s: Settings): BgCheck {
   if (bg === undefined) {
     return {
@@ -52,6 +63,7 @@ export function checkBg(bg: number | undefined, s: Settings): BgCheck {
     };
   }
   const warnings: Warning[] = [];
+  if (isCaution(bg, s)) warnings.push({ level: 'warn', text: cautionText(bg) });
   if (bg >= s.hyperThreshold) {
     warnings.push({
       level: 'warn',

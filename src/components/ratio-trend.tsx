@@ -5,9 +5,8 @@ import { Btn, Card, KV, Notice, T, confirm, notify } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { RECENT_DAYS, basalSentence, basalSummary, blockSuggestions, evaluate, fastingWindows, mealGroupStats, periodSeries, recentEval, trendOf, trendSentence } from '@/logic/optimizer';
+import { RECENT_DAYS, basalSentence, basalSummary, evaluate, fastingWindows, mealGroupStats, periodSeries, recentEval, trendOf, trendSentence } from '@/logic/optimizer';
 import { MAX_CHANGE, MIN_SAMPLES, type Suggestion } from '@/logic/ratios';
-import { blockEnd } from '@/logic/schedule';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
 import { useTests } from '@/store/tests';
@@ -30,7 +29,7 @@ export function SuggestionView({ kind, s, blockId }: { kind: 'icr' | 'isf'; s: S
       <T variant="h2">{title}</T>
       <KV k="Şu anki" v={`${fmt(s.current)} ${unit}`} />
       <KV k="Uygun test/kayıt" v={`${s.samples.length} / ${MIN_SAMPLES}`} />
-      {s.observed !== undefined ? <KV k="Kayıtlara göre gerçekleşen (ortanca)" v={`${fmt(s.observed)} ${unit}`} /> : null}
+      {s.observed !== undefined ? <KV k="Kayıtlara göre gerçekleşen" v={`${fmt(s.observed)} ${unit}`} /> : null}
       {s.suggested === undefined ? (
         <T variant="small">Henüz yeterli veri yok. Yukarıdaki testlerden birini yap.</T>
       ) : changed ? (
@@ -68,7 +67,6 @@ export function RatioTrend() {
   const entries = useLog((s) => s.entries);
   const settings = useSettings((s) => s.settings);
   const update = useSettings((s) => s.update);
-  const setTimeBlocks = useSettings((s) => s.setTimeBlocks);
   const finished = useTests((s) => s.finished);
   const all = evaluate(entries, settings, now);
   const ev = recentEval(all, now); // öneriler yalnızca son haftaların kayıtlarından
@@ -78,14 +76,9 @@ export function RatioTrend() {
   const periods = periodSeries(all, now).filter((p) => p.icr.n > 0 || p.isf.n > 0);
   const windows = fastingWindows(entries, settings, now);
   const basal = basalSummary(windows, settings.basalDose);
-  const icrSug = blockSuggestions(ev.icr, settings.blocks, 'icr');
-  const isfSug = blockSuggestions(ev.isf, settings.blocks, 'isf');
   const used = all.icr.length + all.isf.length;
   const total = all.candidates.icr + all.candidates.isf;
-  const observed = groups.filter((g) => g.observed !== undefined).map((g) => g.observed!);
-  const spread = observed.length >= 2 ? Math.max(...observed) / Math.min(...observed) : 1;
   const level = (v: string) => (v === 'more' || v === 'less' ? 'warn' : 'info');
-  const suggestions = [...icrSug.map((s) => ({ s, kind: 'icr' as const })), ...isfSug.map((s) => ({ s, kind: 'isf' as const }))].filter(({ s }) => s.suggested !== undefined);
   const basalTests = finished.filter((t) => t.kind === 'basal').length;
 
   return (
@@ -93,7 +86,7 @@ export function RatioTrend() {
       <Card title="Oran gidişatı" icon="trending-up">
         <T variant="muted">
           Her gün girdiğin yemek, doz ve şeker kayıtlarından oranlarının gerçekte nasıl çalıştığı sürekli hesaplanır. Vücudundaki değişiklikler oranlarını etkilediyse burada
-          görürsün. Öneriler son {RECENT_DAYS / 7} haftanın kayıtlarından hesaplanır ve hiçbir değişiklik kendiliğinden uygulanmaz.
+          görürsün. Bu tablo son {RECENT_DAYS / 7} haftayı gösterir. Öğün önerileri tüm geçmişten hesaplanır, yeni kayıtlar daha ağırlıklı sayılır. Hiçbir değişiklik kendiliğinden uygulanmaz.
         </T>
         <Notice level={level(tIcr.verdict)} text={trendSentence('icr', tIcr)} />
         <Notice level={level(tIsf.verdict)} text={trendSentence('isf', tIsf)} />
@@ -146,34 +139,8 @@ export function RatioTrend() {
               </View>
             );
           })}
-          {settings.blocks.length === 1 && spread >= 1.2 ? (
-            <>
-              <Notice
-                level="info"
-                text="Öğünler arasında gerçekleşen oran belirgin farklı. Saate göre ayrı oranlar açarsan her öğün kendi oranıyla hesaplanır ve öneriler dilim dilim uygulanır."
-              />
-              <Btn
-                small
-                variant="secondary"
-                icon="time-outline"
-                title="Saate göre ayrı oranları aç"
-                onPress={() =>
-                  confirm('Saate göre ayrı oranlar', 'Mevcut oranlar 4 saat dilimine (sabah, öğle, akşam, gece) kopyalanır. Sonra her dilimi ayarlayabilirsin.', () => setTimeBlocks(true), 'Aç')
-                }
-              />
-            </>
-          ) : null}
         </Card>
       ) : null}
-
-      {suggestions.map(({ s, kind }) => {
-        const b = settings.blocks.find((x) => x.id === s.blockId)!;
-        return (
-          <Card key={`${kind}-${s.blockId}`} title={settings.blocks.length > 1 ? `${b.name} · ${b.start}–${blockEnd(settings.blocks, b)}` : 'Tüm gün'} icon="time-outline">
-            <SuggestionView kind={kind} s={s} blockId={s.blockId} />
-          </Card>
-        );
-      })}
 
       {periods.length > 0 ? (
         <Card title="Dönemlere göre değişim (14 gün)" icon="calendar">

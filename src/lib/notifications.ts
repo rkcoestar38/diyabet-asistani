@@ -49,14 +49,19 @@ async function ensurePermission(N: typeof NotificationsModule): Promise<boolean>
   return asked.granted;
 }
 
-/** Hipo sonrası "tekrar ölç" hatırlatıcısı. Bildirim kimliğini döndürür. */
+const RECHECK_ID = 'hipo-tekrar-hatirlatici';
+
+/** Hipo sonrası "tekrar ölç" hatırlatıcısı. Sabit kimlikle kurulur: yeni tur eskisinin yerine geçer. Bildirim kimliğini döndürür. */
 export async function scheduleRecheck(minutes: number): Promise<string | undefined> {
   const N = load();
   if (!N || !(await ensurePermission(N))) return undefined;
-  return N.scheduleNotificationAsync({
+  await N.cancelScheduledNotificationAsync(RECHECK_ID).catch(() => {});
+  await N.scheduleNotificationAsync({
+    identifier: RECHECK_ID,
     content: { title: 'Şekerini tekrar ölç', body: `${minutes} dakika doldu. Şekerini ölç ve uygulamaya gir.` },
     trigger: { type: N.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: minutes * 60, channelId: 'hatirlatici' },
   });
+  return RECHECK_ID;
 }
 
 export async function cancelNotification(id: string | undefined) {
@@ -66,22 +71,31 @@ export async function cancelNotification(id: string | undefined) {
 
 const POST_MEAL_ID = 'tokluk-hatirlatici';
 
-/** Yemekten 2 saat sonra tokluk şekeri ölçüm hatırlatıcısı kurar */
-export async function schedulePostMealReminder(minutes = 120, mealLabelText?: string): Promise<string | undefined> {
+/**
+ * Yemekten 2 saat sonra tokluk şekeri ölçüm hatırlatıcısı kurar.
+ * `mealTime` verilirse öğün saatinden itibaren sayar (geçmişe dönük kayıtlarda süresi geçtiyse hiç kurmaz);
+ * verilmezse kayıt anından itibaren sayar.
+ */
+export async function schedulePostMealReminder(minutes = 120, mealLabelText?: string, mealTime?: number): Promise<string | undefined> {
   const N = load();
   if (!N || !(await ensurePermission(N))) return undefined;
   await N.cancelScheduledNotificationAsync(POST_MEAL_ID).catch(() => {});
+  const fireAt = mealTime !== undefined ? mealTime + minutes * 60000 : undefined;
+  if (fireAt !== undefined && fireAt <= Date.now()) return undefined;
   return N.scheduleNotificationAsync({
     identifier: POST_MEAL_ID,
     content: {
       title: 'Tokluk şekeri vakti geldi!',
       body: `${mealLabelText ? `${mealLabelText} sonrası ` : ''}2 saat doldu. İnsülin ve tabağın dengesini görmek için şekerini ölçelim!`,
     },
-    trigger: {
-      type: N.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: minutes * 60,
-      channelId: 'hatirlatici',
-    },
+    trigger:
+      fireAt !== undefined
+        ? { type: N.SchedulableTriggerInputTypes.DATE, date: new Date(fireAt), channelId: 'hatirlatici' }
+        : {
+            type: N.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: minutes * 60,
+            channelId: 'hatirlatici',
+          },
   });
 }
 

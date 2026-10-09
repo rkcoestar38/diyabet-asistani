@@ -2,7 +2,7 @@
   "expo": {
     "name": "Diyabet Asistanı",
     "slug": "diyabet-asistani",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "diyabetasistani",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.diyabetasistani.app",
-      "versionCode": 7
+      "versionCode": 8
     },
     "web": {
       "output": "single",
@@ -37,7 +37,25 @@
         }
       ],
       "expo-sharing",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Tokluk",
+              "label": "Tokluk Şekeri",
+              "description": "Son öğünden 2 saat sonra tokluk şekeri için geri sayım; dokununca ölçümü girmeye açar",
+              "minWidth": "140dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000,
+              "previewImage": "./assets/widget-preview/tokluk.png"
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false,

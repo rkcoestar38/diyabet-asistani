@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Collapsible } from '@/components/guide';
 import { Linking } from 'react-native';
@@ -8,16 +8,41 @@ import { Btn, Card, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle,
 import { useThemePref, type ThemePref } from '@/store/theme';
 import { notificationsSupported, notificationsUnsupportedReason, scheduledBasal, syncBasalReminder } from '@/lib/notifications';
 import { backupNow } from '@/lib/backup';
+import { useTests } from '@/store/tests';
 import { pickText } from '@/lib/files';
 import { isWeb } from '@/lib/web';
 import { DEFAULT_MEAL_STARTS, MEALS, mealScheduleProblems } from '@/logic/meals';
-import { parseHHMM } from '@/logic/schedule';
+import { chooseRise, hypoRiseSamples } from '@/logic/hypo';
+import { activeBlock, parseHHMM } from '@/logic/schedule';
 import { useFoods } from '@/store/foods';
 import { toast } from '@/store/toast';
 import type { CountMethod as CountMethodValue } from '@/data/foods-tr';
 import { useLog } from '@/store/log';
 import { DEFAULT_SETTINGS, useSettings } from '@/store/settings';
+import { applyMockData } from '@/data/seed-mock';
 
+
+/** Düşük şeker ekranının hesabında kullanılan iki değer: tablet gramajı ve 1 g hızlı şekerin etkisi */
+function HypoTreatment() {
+  const s = useSettings((st) => st.settings);
+  const update = useSettings((st) => st.update);
+  const entries = useLog((st) => st.entries);
+  const block = activeBlock(s.blocks, new Date());
+  if (!block) return null;
+  const choice = chooseRise(s.hypoRise, hypoRiseSamples(entries, s.blocks, { dia: s.dia, peak: s.peak }), block);
+  const source =
+    choice.source === 'manual' ? 'senin girdiğin değer' : choice.source === 'data' ? `${choice.samples} hipo kaydından öğrenildi` : 'oranlarından hesaplandı';
+  return (
+    <>
+      <Row>
+        <NumField label="1 glukoz tableti" suffix="g" step={0.5} min={1} max={20} value={s.tabletG} onCommit={(v) => update({ tabletG: Math.min(Math.max(v, 1), 20) })} />
+        <NumField label="1 g şeker yükseltir" suffix="mg/dL" step={0.5} min={0.5} max={15} value={choice.rise} onCommit={(v) => update({ hypoRise: Math.min(Math.max(v, 0.5), 15) })} />
+      </Row>
+      <T variant="small">1 g hızlı şekerin etkisi: {source}. Hipo tedavilerini düşük şeker ekranından kaydettikçe kendiliğinden öğrenilir.</T>
+      {s.hypoRise !== undefined ? <Btn small variant="secondary" icon="sync" title="Otomiğe dön" onPress={() => update({ hypoRise: undefined })} /> : null}
+    </>
+  );
+}
 
 export default function SettingsScreen() {
   const s = useSettings((st) => st.settings);
@@ -26,6 +51,8 @@ export default function SettingsScreen() {
   const setThemePref = useThemePref((st) => st.setPref);
   const [basalTime, setBasalTime] = useState(s.basalTime);
   const [basalName, setBasalName] = useState(s.basalName);
+  // İsim yazılırken hatırlatıcıyı her tuşta değil, yazım durunca yeniden kur
+  const nameReschedule = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Telefonda gerçekte kurulu saat: ayardaki saatle uyuşmuyorsa kullanıcı görsün
   const [sched, setSched] = useState<{ hour: number; minute: number } | null | undefined>(undefined);
@@ -82,6 +109,11 @@ export default function SettingsScreen() {
             onChangeText={(v) => {
               setBasalName(v);
               update({ basalName: v });
+              // Hatırlatıcı metnindeki eski insülin adı kalmasın: yazım bitince yeniden kur
+              if (nameReschedule.current) clearTimeout(nameReschedule.current);
+              if (s.basalReminder) {
+                nameReschedule.current = setTimeout(() => setReminder(true, basalTime, v), 800);
+              }
             }}
           />
           <NumField label="Günlük doz" suffix="Ü" step={1} min={1} max={200} value={s.basalDose} onCommit={(basalDose) => update({ basalDose })} />
@@ -111,6 +143,18 @@ export default function SettingsScreen() {
         ) : null}
       </Collapsible>
 
+      <Collapsible title="Hedef aralıklar (Günlük grafiği)" icon="analytics-outline">
+        <T variant="small">Yemekten sonraki 3 saatteki ölçümler tok, diğerleri aç sayılır. Grafikteki bant ve renkler buna göre çizilir.</T>
+        <Row>
+          <NumField label="Aç alt" suffix="mg/dL" step={5} min={60} max={140} value={s.fastingRange.low} onCommit={(v) => v < s.fastingRange.high && update({ fastingRange: { ...s.fastingRange, low: v } })} />
+          <NumField label="Aç üst" suffix="mg/dL" step={5} min={80} max={200} value={s.fastingRange.high} onCommit={(v) => v > s.fastingRange.low && update({ fastingRange: { ...s.fastingRange, high: v } })} />
+        </Row>
+        <Row>
+          <NumField label="Tok alt" suffix="mg/dL" step={5} min={60} max={200} value={s.postRange.low} onCommit={(v) => v < s.postRange.high && update({ postRange: { ...s.postRange, low: v } })} />
+          <NumField label="Tok üst" suffix="mg/dL" step={5} min={120} max={300} value={s.postRange.high} onCommit={(v) => v > s.postRange.low && update({ postRange: { ...s.postRange, high: v } })} />
+        </Row>
+      </Collapsible>
+
       <Collapsible title="Uyarı eşikleri" icon="warning-outline">
         <Row>
           <NumField label="Hipo eşiği" suffix="mg/dL" step={5} min={60} max={90} value={s.hypoThreshold} onCommit={(v) => update({ hypoThreshold: Math.min(Math.max(v, 60), 90) })} />
@@ -124,6 +168,7 @@ export default function SettingsScreen() {
           />
         </Row>
         <NumField label="Keton kontrolü için yüksek şeker" suffix="mg/dL" step={10} min={180} max={350} value={s.hyperThreshold} onCommit={(v) => update({ hyperThreshold: Math.min(Math.max(v, 180), 350) })} />
+        <HypoTreatment />
       </Collapsible>
 
       <Collapsible title="Egzersiz öncesi doz azaltma" icon="bicycle">
@@ -282,6 +327,11 @@ function Backup() {
             favorites: data.foods?.favorites ?? [],
             meals: data.foods?.meals ?? [],
           });
+          // Oran testi geçmişi (v2 yedeklerde var; eskilerde yoktur)
+          useTests.setState({
+            finished: Array.isArray(data.tests?.finished) ? data.tests.finished : [],
+            active: data.tests?.active ?? null,
+          });
           notify('Geri yüklendi', 'Verilerin yüklendi. Oranlarını Ayarlar/Oranlar sekmesinden kontrol et.');
         },
         'Geri yükle',
@@ -292,9 +342,27 @@ function Backup() {
   }
 
   return (
-    <Card title="Yedekleme" icon="cloud-upload-outline">
+    <Card title={__DEV__ ? 'Yedekleme ve Demo' : 'Yedekleme'} icon="cloud-upload-outline">
       <Btn variant="secondary" icon="download-outline" title="Yedek al (JSON)" onPress={exportBackup} />
       <Btn variant="secondary" icon="refresh" title="Yedekten geri yükle" onPress={importBackup} />
+      {__DEV__ ? (
+        <Btn
+          variant="secondary"
+          icon="sparkles"
+          title="Demo / Mock Verisi Yükle (HbA1c %6.6)"
+          onPress={() =>
+            confirm(
+              'Demo Verisi Yükle',
+              '14 günlük yemek ve glukoz kayıtları yüklenecek (Tahmini HbA1c: %6.6). Mevcut kayıtlar değiştirilecek.',
+              () => {
+                applyMockData();
+                notify('Demo Verileri Yüklendi', '14 günlük kayıtlar ve ayarlar başarıyla yüklendi.');
+              },
+              'Yükle',
+            )
+          }
+        />
+      ) : null}
       <Btn
         variant="ghost"
         icon="trash-outline"

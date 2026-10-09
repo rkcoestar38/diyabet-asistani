@@ -7,6 +7,7 @@ import { WaterLevel } from '@/components/water';
 import { EstimateForm, InsulinForm, RatioEditor, useApplyEstimate } from '@/components/settings-forms';
 import { Btn, Card, Field, Row, Screen, T } from '@/components/ui';
 import { Space } from '@/constants/theme';
+import { applyMockData } from '@/data/seed-mock';
 import { fmt } from '@/logic/bolus';
 import { scheduleProblems } from '@/logic/schedule';
 import { useSettings } from '@/store/settings';
@@ -23,7 +24,11 @@ export default function Onboarding() {
   const [estimated, setEstimated] = useState(false);
   const [basalName, setBasalName] = useState(s.basalName);
   const valid = scheduleProblems(s.blocks).length === 0;
-  const block = s.blocks[0];
+
+  const handleApplyMock = () => {
+    applyMockData();
+    router.replace('/');
+  };
 
   const nav = (canNext: boolean, next = () => setStep(step + 1)) => (
     <Row>
@@ -57,6 +62,14 @@ export default function Onboarding() {
             bilmiyorsan, onları adım adım bulmanı da sağlar.
           </T>
           {nav(true)}
+          {__DEV__ ? (
+            <Btn
+              variant="secondary"
+              icon="sparkles"
+              title="Demo Verileriyle Başla (HbA1c %6.6)"
+              onPress={handleApplyMock}
+            />
+          ) : null}
         </Card>
       ) : null}
 
@@ -81,6 +94,14 @@ export default function Onboarding() {
             </Row>
           </Card>
           {nav(true)}
+          {__DEV__ ? (
+            <Btn
+              variant="secondary"
+              icon="sparkles"
+              title="Demo Verilerini Yükle (HbA1c %6.6)"
+              onPress={handleApplyMock}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -156,16 +177,12 @@ export default function Onboarding() {
           </WaterLevel>
           <Card title="Şu anki ayarların" icon="checkmark-circle">
             <View style={{ gap: Space.xs }}>
-              <T>
-                • Karbonhidrat oranı: <T style={{ fontWeight: '700' }}>1 Ü = {fmt(block.icr)} g</T>
-              </T>
-              <T>
-                • Düzeltme: <T style={{ fontWeight: '700' }}>1 Ü ↓ {block.isf} mg/dL</T>
-              </T>
-              <T>
-                • Hedef şeker: <T style={{ fontWeight: '700' }}>{block.target} mg/dL</T>
-              </T>
-              {s.blocks.length > 1 ? <T variant="small">({s.blocks.length} saat dilimi; diğerleri Ayarlar’da)</T> : null}
+              {s.blocks.map((b) => (
+                <T key={b.id}>
+                  • {b.name}: <T style={{ fontWeight: '700' }}>1 Ü = {fmt(b.icr)} g</T> · 1 Ü ↓ {b.isf} · hedef {b.target}
+                </T>
+              ))}
+              <T variant="small">Ara öğünler ve gece, kendinden önceki ana öğünün oranını kullanır.</T>
             </View>
           </Card>
           <Card title="Nasıl kullanılır?" icon="bulb">

@@ -3,6 +3,7 @@ import { router, type Href } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { PostMealCountdownWidget } from "@/components/postmeal-countdown";
 import { UpdateBanner } from "@/components/update-banner";
 import { BackupReminder, InstallHint } from "@/components/web-hints";
 import { Btn, Card, Pressy, T, Screen, type IconName } from "@/components/ui";
@@ -309,6 +310,8 @@ export default function Home() {
           </View>
         </Card>
       ) : null}
+
+      <PostMealCountdownWidget entries={entries} />
 
       {waiting ? (
         <Pressy

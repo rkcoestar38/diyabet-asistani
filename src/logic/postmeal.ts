@@ -20,6 +20,17 @@ export function awaitingPost(entries: LogEntry[], now: number): LogEntry | undef
   return undefined;
 }
 
+/** Geri sayım için aktif öğün: tokluğu girilmemiş, son 4 saatteki en son öğün (0–240 dk; uygulamadaki kart ve ana ekran widget'ı aynı seçimi kullanır) */
+export function activeCountdownMeal(entries: LogEntry[], now: number): LogEntry | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (now - e.time > POST_UNTIL * MIN) return undefined;
+    if (e.post || !e.carbs || e.carbs < 1) continue;
+    if (!postOf(entries, e)) return e;
+  }
+  return undefined;
+}
+
 /** Yeni bir tokluk ölçümünün hangi yemeğe ait olduğu: `at` zamanından önceki en yakın yemek (6 saate kadar) */
 export function mealBefore(entries: LogEntry[], at: number, excludeId?: string): LogEntry | undefined {
   let best: LogEntry | undefined;

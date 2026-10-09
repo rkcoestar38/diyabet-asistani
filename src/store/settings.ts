@@ -1,37 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { DEFAULT_MEAL_STARTS } from '@/logic/meals';
+import { DEFAULT_MEAL_STARTS, mealBlocks } from '@/logic/meals';
 import { parseHHMM } from '@/logic/schedule';
 import { setDayOffset } from '@/logic/stats';
 import type { Settings, TimeBlock } from '@/logic/types';
 
 import { storage, uid } from './storage';
 
-const block = (name: string, start: string, from?: Partial<TimeBlock>): TimeBlock => ({
-  icr: 10,
-  isf: 50,
-  target: 110,
-  low: 80,
-  high: 140,
-  ...from,
-  id: uid(),
-  name,
-  start,
-});
-
-/** Tek oran modu: tüm gün için tek dilim */
-export const isSingleBlock = (blocks: TimeBlock[]) => blocks.length === 1;
-
-const DAY_PARTS: [string, string][] = [
-  ['Sabah', '06:00'],
-  ['Öğle', '11:00'],
-  ['Akşam', '17:00'],
-  ['Gece', '22:00'],
-];
-
 export const DEFAULT_SETTINGS: Settings = {
-  blocks: [block('Tüm gün', '00:00')],
+  blocks: mealBlocks([], DEFAULT_MEAL_STARTS, uid),
   rapidName: '',
   dia: 4,
   peak: 75,
@@ -51,6 +29,8 @@ export const DEFAULT_SETTINGS: Settings = {
   mealStarts: DEFAULT_MEAL_STARTS,
   tabletG: 4,
   countMethod: 'exchange',
+  fastingRange: { low: 80, high: 130 },
+  postRange: { low: 80, high: 180 },
 };
 
 export type RatioChange = {
@@ -67,10 +47,6 @@ type State = {
   ratioHistory: RatioChange[];
   update: (patch: Partial<Settings>) => void;
   updateBlock: (id: string, patch: Partial<TimeBlock>, source?: string) => void;
-  addBlock: () => void;
-  removeBlock: (id: string) => void;
-  /** Saate göre farklı oranları aç (mevcut değerler 4 dilime kopyalanır) veya kapat (şu anki dilim tüm güne uygulanır) */
-  setTimeBlocks: (enabled: boolean, keepFrom?: TimeBlock) => void;
   replaceAll: (s: Settings, history?: RatioChange[]) => void;
 };
 
@@ -79,7 +55,13 @@ export const useSettings = create<State>()(
     (set) => ({
       settings: DEFAULT_SETTINGS,
       ratioHistory: [],
-      update: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
+      // Öğün saatleri değişince oran dilimlerinin başlangıçları da değişir
+      update: (patch) =>
+        set((st) => {
+          const next = { ...st.settings, ...patch };
+          if (patch.mealStarts) next.blocks = mealBlocks(next.blocks, next.mealStarts, uid);
+          return { settings: next };
+        }),
       updateBlock: (id, patch, source) =>
         set((st) => {
           const old = st.settings.blocks.find((b) => b.id === id);
@@ -100,43 +82,46 @@ export const useSettings = create<State>()(
             },
           };
         }),
-      addBlock: () =>
-        set((st) => {
-          const base = st.settings.blocks[st.settings.blocks.length - 1] ?? st.settings.blocks[0];
-          return {
-            settings: {
-              ...st.settings,
-              blocks: [...st.settings.blocks, block('Yeni dilim', '12:00', base)],
-            },
-          };
-        }),
-      removeBlock: (id) =>
-        set((st) =>
-          st.settings.blocks.length <= 1
-            ? st
-            : { settings: { ...st.settings, blocks: st.settings.blocks.filter((b) => b.id !== id) } },
-        ),
-      setTimeBlocks: (enabled, keepFrom) =>
-        set((st) => {
-          const base = keepFrom ?? st.settings.blocks[0];
-          const blocks = enabled ? DAY_PARTS.map(([n, t]) => block(n, t, base)) : [block('Tüm gün', '00:00', base)];
-          return { settings: { ...st.settings, blocks } };
-        }),
-      replaceAll: (settings, ratioHistory) => set((st) => ({ settings, ratioHistory: ratioHistory ?? st.ratioHistory })),
+      replaceAll: (settings, ratioHistory) =>
+        set((st) => ({ settings: { ...settings, blocks: mealBlocks(settings.blocks, settings.mealStarts ?? DEFAULT_MEAL_STARTS, uid) }, ratioHistory: ratioHistory ?? st.ratioHistory })),
     }),
     {
       name: 'settings',
       storage,
-      version: 2,
+      version: 3,
       // v2: "NovoRapid" yalnızca eski bir varsayılandı; kullanıcı seçmediyse yanlış insülin adı raporlanmasın
+      // v3: açlık üst varsayılanı 120→130; yalnızca eski varsayılanı taşı, kullanıcının kendi değerine dokunma
       migrate: (persisted, version) => {
-        const p = persisted as { settings?: { rapidName?: string } } | undefined;
+        const p = persisted as { settings?: { rapidName?: string; fastingRange?: { low?: number; high?: number } } } | undefined;
         if (version < 2 && p?.settings?.rapidName === 'NovoRapid') p.settings.rapidName = '';
+        if (version < 3 && p?.settings?.fastingRange?.low === 80 && p?.settings?.fastingRange.high === 120) {
+          p.settings.fastingRange = { low: 80, high: 130 };
+        }
         return persisted as never;
       },
       merge: (persisted, current) => {
         const p = persisted as Partial<State> | undefined;
-        return { ...current, ...p, settings: { ...DEFAULT_SETTINGS, ...p?.settings, mealStarts: { ...DEFAULT_MEAL_STARTS, ...p?.settings?.mealStarts } } };
+        const mealStarts = { ...DEFAULT_MEAL_STARTS, ...p?.settings?.mealStarts };
+        // v1.0.8: tek oran / saat dilimleri yerine her zaman sabah, öğle, akşam oranları
+        const blocks = mealBlocks(Array.isArray(p?.settings?.blocks) ? p.settings.blocks : DEFAULT_SETTINGS.blocks, mealStarts, uid);
+        // Aralıklar yalnızca şekil bakımından doğrulanır; kullanıcı değeri asla varsayılanla ezilmez
+        const numOr = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+        const rangeOr = (r: unknown, def: { low: number; high: number }) => {
+          const o = r as { low?: unknown; high?: unknown } | undefined;
+          return o ? { low: numOr(o.low, def.low), high: numOr(o.high, def.high) } : { ...def };
+        };
+        return {
+          ...current,
+          ...p,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...p?.settings,
+            mealStarts,
+            blocks,
+            fastingRange: rangeOr(p?.settings?.fastingRange, DEFAULT_SETTINGS.fastingRange),
+            postRange: rangeOr(p?.settings?.postRange, DEFAULT_SETTINGS.postRange),
+          },
+        };
       },
     },
   ),
@@ -144,5 +129,5 @@ export const useSettings = create<State>()(
 
 // Günün başlangıcı = sabah öğününün başlangıç saati (gece kayıtları önceki güne yazılır). Ayar değişince veya yüklenince güncellenir.
 const syncDayStart = (st: State) => setDayOffset(parseHHMM(st.settings.mealStarts?.sabah ?? DEFAULT_MEAL_STARTS.sabah));
-useSettings.subscribe(syncDayStart);
 syncDayStart(useSettings.getState());
+useSettings.subscribe(syncDayStart);

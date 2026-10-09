@@ -236,21 +236,34 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
       </View>
 
       {!query ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Space.sm }}>
+        <View style={styles.categoryGrid}>
           {[FAV, MINE, ...CATEGORIES].map((cat) => {
             const active = cat === category;
             return (
               <Pressable
                 key={cat}
                 onPress={() => setCategory(cat)}
-                style={[styles.chip, { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : c.card }]}>
-                <T variant="small" color={active ? 'primary' : 'text'}>
+                style={[
+                  styles.categoryGridTile,
+                  {
+                    borderColor: active ? c.primary : c.border,
+                    backgroundColor: active ? c.primarySoft : c.card,
+                  },
+                ]}>
+                <T
+                  variant="small"
+                  numberOfLines={1}
+                  style={{
+                    fontWeight: active ? '700' : '500',
+                    color: active ? c.primary : c.text,
+                    textAlign: 'center',
+                  }}>
                   {cat}
                 </T>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       ) : null}
 
       {category === MINE && !query ? (
@@ -605,4 +618,6 @@ const styles = StyleSheet.create({
   stepperBtn: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center' },
   stepperInput: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', paddingVertical: 0 },
   resultBox: { alignItems: 'center', paddingVertical: Space.sm, borderRadius: Radius.md, borderWidth: 1, marginVertical: 2 },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.xs, marginVertical: Space.xs },
+  categoryGridTile: { width: '48%', flexGrow: 1, borderWidth: 1.5, borderRadius: Radius.md, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
 });

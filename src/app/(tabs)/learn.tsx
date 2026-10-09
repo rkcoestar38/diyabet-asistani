@@ -59,12 +59,10 @@ function SuggestionsSection() {
 
   return (
     <Card title="Öneriler" icon="bulb-outline">
-      <T variant="muted">Kayıtlarına ve testlerine göre hesaplanan oran önerileri:</T>
+      <T variant="muted">Her öğünün oranı, o öğünde yediğin karbonhidrat, öncesindeki şeker, vurduğun doz ve 2,5–5 saat sonraki şekerinden hesaplanır. Tüm geçmiş kayıtların sayılır; yeni kayıtlar daha ağırlıklıdır.</T>
       {blocks.map((b) => (
         <View key={b.id} style={{ gap: Space.sm, marginTop: Space.xs }}>
-          {settings.blocks.length > 1 ? (
-            <T style={{ fontWeight: '700' }}>{`${b.name} (${b.start}–${blockEnd(settings.blocks, b)})`}</T>
-          ) : null}
+          <T style={{ fontWeight: '700' }}>{`${b.name} öğünü (${b.start}–${blockEnd(settings.blocks, b)})`}</T>
           <SuggestionView kind="icr" s={icr.find((x) => x.blockId === b.id)!} blockId={b.id} />
           <SuggestionView kind="isf" s={isf.find((x) => x.blockId === b.id)!} blockId={b.id} />
         </View>

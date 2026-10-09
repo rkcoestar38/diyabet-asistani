@@ -1,7 +1,12 @@
-/** Günün belli bir saatinden itibaren geçerli oranlar. Bir sonraki bloğun başlangıcına kadar geçerlidir. */
+/** Oranların ait olduğu ana öğün. Ara öğünler ve gece, kendinden önceki ana öğünün oranını kullanır. */
+export type RatioMeal = 'sabah' | 'ogle' | 'aksam';
+
+/** Bir ana öğünün oranları. Öğünün başlangıç saatinden bir sonraki ana öğüne kadar geçerlidir. */
 export type TimeBlock = {
   id: string;
   name: string;
+  /** Hangi ana öğün (eski kayıtlarda yok; yüklenirken tamamlanır) */
+  meal?: RatioMeal;
   /** "HH:MM" */
   start: string;
   /** Karbonhidrat oranı: 1 ünite kaç gram karbonhidratı karşılar (g/Ü) */
@@ -57,11 +62,14 @@ export type Settings = {
   hypoRise?: number;
   /** Bir glukoz tabletindeki karbonhidrat (g) */
   tabletG: number;
+  /** Günlük grafiği ve istatistikleri için hedef aralıklar: aç karnına ve yemekten sonraki 3 saat (tok) */
+  fastingRange: { low: number; high: number };
+  postRange: { low: number; high: number };
 };
 
 export type MealType = 'sabah' | 'sabahAra' | 'ogle' | 'ogleAra' | 'aksam' | 'aksamAra' | 'gece';
 
-export type LogItem = { foodId: string; name: string; grams: number; carbs: number; fatty?: boolean };
+export type LogItem = { id?: string; foodId: string; name: string; grams: number; carbs: number; fatty?: boolean };
 
 export type LogEntry = {
   id: string;

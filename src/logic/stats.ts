@@ -27,13 +27,14 @@ export type Stats = {
 /** Bir hipo atağı içindeki kayıtları birleştirmek için süre */
 const EPISODE_GAP_MIN = 60;
 
-export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThreshold: number): Stats {
+/** `ranges` verilirse ölçümler aç/tok aralığına göre sınıflanır (`all`: bağlam için tüm kayıtlar), verilmezse oran dilimlerinin aralığına göre */
+export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThreshold: number, ranges?: BgRanges & { all?: LogEntry[] }): Stats {
   const bgs = entries.filter((e) => e.bg !== undefined);
   let inRange = 0;
   let below = 0;
   let above = 0;
   for (const e of bgs) {
-    const b = activeBlock(blocks, new Date(e.bgTime ?? e.time));
+    const b = ranges ? rangeFor(e, ranges.all ?? entries, ranges) : activeBlock(blocks, new Date(e.bgTime ?? e.time));
     if (!b) continue;
     if (e.bg! < b.low) below++;
     else if (e.bg! > b.high) above++;
@@ -63,10 +64,10 @@ export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThres
   };
 }
 
-/** Bir şekerin durumu: palet anahtarı olarak (danger = hipo, ok = hedef aralığında, warn = aralığın dışında). Uygulamanın her yerinde aynı kural. */
+/** Bir şekerin durumu: palet anahtarı olarak (danger = hipo veya hedef aralık dışı kırmızı, ok = hedef aralığında yeşil). */
 export function bgLevel(bg: number, block: TimeBlock | undefined, hypoThreshold: number): 'danger' | 'ok' | 'warn' {
   if (bg < hypoThreshold) return 'danger';
-  if (block && (bg > block.high || bg < block.low)) return 'warn';
+  if (block && (bg > block.high || bg < block.low)) return 'danger';
   return 'ok';
 }
 
@@ -115,4 +116,40 @@ function countEpisodes(times: number[]): number {
     last = t;
   }
   return count;
+}
+
+/** Yemekten sonra bu kadar dakika içindeki ölçümler tokluk şekeri sayılır */
+export const POST_WINDOW_MIN = 180;
+
+export type BgRanges = { fastingRange: { low: number; high: number }; postRange: { low: number; high: number } };
+
+/** Tokluk şekeri mi: "tokluk" olarak işaretlenmiş ya da son 3 saatte karbonhidratlı yemek yenmiş. Yemeğin kendi öncesi ölçümü açlık sayılır. */
+export function isPostReading(e: LogEntry, all: LogEntry[]): boolean {
+  if (e.post) return true;
+  const t = e.bgTime ?? e.time;
+  return all.some((m) => (m.carbs ?? 0) > 0 && m.time < t && t - m.time <= POST_WINDOW_MIN * 60000);
+}
+
+/** Ölçümün bağlamına göre (aç/tok) hedef aralığı */
+export function rangeFor(e: LogEntry, all: LogEntry[], r: BgRanges): { low: number; high: number } {
+  return isPostReading(e, all) ? r.postRange : r.fastingRange;
+}
+
+/** Aç/tok aralığına göre şekerin durumu (palet anahtarı): açlık 80-120 ok, tokluk 80-180 ok; dışındakiler kırmızı (danger) */
+export function bgLevelIn(bg: number, range: { low: number; high: number }, hypoThreshold: number): 'danger' | 'ok' | 'warn' {
+  if (bg < hypoThreshold) return 'danger';
+  return bg < range.low || bg > range.high ? 'danger' : 'ok';
+}
+
+/** Yemeklerden sonraki tokluk pencereleri (birleşik, sıralı) */
+export function postWindows(all: LogEntry[], from: number, to: number): [number, number][] {
+  const span = POST_WINDOW_MIN * 60000;
+  const starts = all.filter((m) => (m.carbs ?? 0) > 0 && m.time + span > from && m.time < to).map((m) => m.time).sort((a, b) => a - b);
+  const out: [number, number][] = [];
+  for (const s of starts) {
+    const last = out[out.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], s + span);
+    else out.push([s, s + span]);
+  }
+  return out.map(([a, b]) => [Math.max(a, from), Math.min(b, to)]);
 }

@@ -1,9 +1,10 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Btn, Card, DateField, Field, KV, Notice, Pressy, Row, Screen, T, Toggle, notify } from '@/components/ui';
-import { Radius, useTheme } from '@/constants/theme';
-import { sharePdf, shareText, toCsv } from '@/lib/files';
+import { Radius, Space, useTheme } from '@/constants/theme';
+import { openHtmlReport, sharePdf, shareText, toCsv } from '@/lib/files';
 import { useNow } from '@/lib/hooks';
 import { parseDateInput, toDateInput } from '@/lib/input';
 import { fmt } from '@/logic/bolus';
@@ -49,6 +50,7 @@ export default function Report() {
   const [name, setName] = useState(settings.patientName ?? '');
   const [sections, setSections] = useState<ReportSections>(DEFAULT_REPORT_SECTIONS);
   const [busy, setBusy] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
 
   const range = useMemo<{ error: string } | { from: number; to: number }>(() => {
     if (preset === 'custom') {
@@ -111,19 +113,34 @@ export default function Report() {
     });
   }
 
+  function getReportHtml(): string | null {
+    if ('error' in range || !hasAnySection) return null;
+    return buildReportHtml({
+      entries,
+      settings: { ...settings, patientName: name.trim() || undefined },
+      from: range.from,
+      to: range.to,
+      ratioChanges: history,
+      basalTests: finishedTests.filter((t) => t.kind === 'basal'),
+      sections,
+    });
+  }
+
+  function handleOpenPreview() {
+    const html = getReportHtml();
+    if (html) setPreviewHtml(html);
+  }
+
+  function handleOpenInNewTab() {
+    const html = getReportHtml();
+    if (html) openHtmlReport(html, `diyabet-raporu.html`);
+  }
+
   async function exportPdf() {
-    if ('error' in range || !hasAnySection) return;
+    const html = getReportHtml();
+    if (!html || 'error' in range) return;
     setBusy(true);
     try {
-      const html = buildReportHtml({
-        entries,
-        settings: { ...settings, patientName: name.trim() || undefined },
-        from: range.from,
-        to: range.to,
-        ratioChanges: history,
-        basalTests: finishedTests.filter((t) => t.kind === 'basal'),
-        sections,
-      });
       const tag = `${toDateInput(range.from).replace(/\./g, '-')}_${toDateInput(range.to - DAY).replace(/\./g, '-')}`;
       await sharePdf(html, `diyabet-raporu-${tag}.pdf`);
     } catch (e) {
@@ -228,18 +245,120 @@ export default function Report() {
         </Card>
       ) : null}
 
-      <Btn
-        title={busy ? 'Hazırlanıyor…' : 'PDF raporu paylaş'}
-        icon="share-outline"
-        disabled={busy || bad || inRange.length === 0 || !hasAnySection}
-        onPress={exportPdf}
-      />
+      {/* Rapor Aksiyon Butonları */}
+      <View style={{ gap: Space.sm }}>
+        <Row gap={Space.sm}>
+          <Btn
+            title="Raporu Görüntüle"
+            icon="eye-outline"
+            style={{ flexGrow: 1 }}
+            disabled={bad || inRange.length === 0 || !hasAnySection}
+            onPress={handleOpenPreview}
+          />
+          {Platform.OS === 'web' ? (
+            <Btn
+              title="Yeni Sekmede Aç"
+              icon="open-outline"
+              variant="secondary"
+              disabled={bad || inRange.length === 0 || !hasAnySection}
+              onPress={handleOpenInNewTab}
+            />
+          ) : null}
+        </Row>
+
+        <Btn
+          title={busy ? 'Hazırlanıyor…' : 'PDF Raporu Paylaş / Yazdır'}
+          icon="share-outline"
+          disabled={busy || bad || inRange.length === 0 || !hasAnySection}
+          onPress={exportPdf}
+        />
+      </View>
+
       {!bad && inRange.length === 0 ? <Notice level="info" text="Seçtiğin aralıkta kayıt yok. Başka bir aralık seç." /> : null}
       {!bad && inRange.length > 0 && !hasAnySection ? <Notice level="warn" text="Rapora eklenecek en az bir bölüm seçmelisin." /> : null}
       <Btn variant="secondary" icon="grid-outline" title="Excel için CSV paylaş" disabled={bad || inRange.length === 0} onPress={exportCsv} />
       <T variant="small" style={{ textAlign: 'center' }}>
-        Paylaşım menüsünden WhatsApp, e-posta ya da yazdır seçebilirsin.
+        Raporu uygulama içinde inceleyebilir, tarayıcıda açabilir veya PDF olarak yazdırıp paylaşabilirsiniz.
       </T>
+
+      {/* Rapor Tam Ekran Önizleme Modalı */}
+      <Modal
+        visible={Boolean(previewHtml)}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPreviewHtml(null)}>
+        <View style={[styles.modalRoot, { backgroundColor: c.bg }]}>
+          {/* Modal Üst Çubuk */}
+          <View style={[styles.modalHeader, { borderBottomColor: c.border, backgroundColor: c.card }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Ionicons name="document-text" size={22} color={c.primary} />
+              <T variant="h2" style={{ fontWeight: '700' }} numberOfLines={1}>
+                Diyabet Raporu Önizleme
+              </T>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {Platform.OS === 'web' ? (
+                <Pressable
+                  onPress={() => previewHtml && openHtmlReport(previewHtml, 'diyabet-raporu.html')}
+                  hitSlop={8}
+                  accessibilityLabel="Yeni sekmede aç"
+                  style={[styles.headerIconBtn, { backgroundColor: c.cardAlt, borderColor: c.border }]}>
+                  <Ionicons name="open-outline" size={18} color={c.text} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => setPreviewHtml(null)}
+                hitSlop={8}
+                accessibilityLabel="Kapat"
+                style={[styles.headerIconBtn, { backgroundColor: c.cardAlt, borderColor: c.border }]}>
+                <Ionicons name="close" size={20} color={c.text} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Rapor İçeriği */}
+          <View style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
+            {Platform.OS === 'web' && previewHtml ? (
+              // @ts-ignore
+              <iframe
+                srcDoc={previewHtml}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  backgroundColor: '#ffffff',
+                }}
+                title="Diyabet Raporu"
+              />
+            ) : (
+              <View style={{ flex: 1, padding: Space.md, justifyContent: 'center', alignItems: 'center' }}>
+                <T>Rapor hazırlandı.</T>
+                <Btn title="PDF Olarak Paylaş" icon="share-outline" onPress={exportPdf} style={{ marginTop: 12 }} />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  modalRoot: { flex: 1 },
+  modalHeader: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

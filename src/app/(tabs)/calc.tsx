@@ -13,6 +13,8 @@ import { Radius, Space, useTheme } from '@/constants/theme';
 import { currentTime, useCob, useIob, useNow } from '@/lib/hooks';
 import { toTimeInput } from '@/lib/input';
 import { cancelNotification, schedulePostMealReminder } from '@/lib/notifications';
+import { syncToklukWidget } from '@/lib/widget-sync';
+import { uid } from '@/store/storage';
 import { estimateBgAt } from '@/logic/bgtime';
 import { calcBolus, carbsForDose, carbsToTarget, checkBg, fmt } from '@/logic/bolus';
 import { carbsOnBoard, insulinOnBoard, recentBolus } from '@/logic/iob';
@@ -151,8 +153,8 @@ export default function Calculator() {
     const items =
       mode === 'meal' && cart.length
         ? [
-            ...cart.map((i) => ({ foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })),
-            ...(rule > 0 ? [{ foodId: 'rule-meat', name: 'Et kuralı (100 g üzeri et)', grams: 0, carbs: rule }] : []),
+            ...cart.map((i) => ({ id: uid(), foodId: i.foodId, name: i.name, grams: i.grams, carbs: i.carbs, fatty: i.fatty })),
+            ...(rule > 0 ? [{ id: uid(), foodId: 'rule-meat', name: 'Et kuralı (100 g üzeri et)', grams: 0, carbs: rule }] : []),
           ]
         : undefined;
     const savedAt = when.retro ? when.doseTime : currentTime();
@@ -170,9 +172,12 @@ export default function Calculator() {
       foods: items ? items.map((i) => `${i.name} ${i.grams} g`).join(', ') : undefined,
     });
     resetForm();
+    // Ana ekran widget'ı da bu kayda göre güncellensin
+    syncToklukWidget();
     if (mode === 'meal') {
       if (carbs > 0 || (items && items.length > 0)) {
-        schedulePostMealReminder(120, mealLabel(when.meal)).catch(() => {});
+        // Hatırlatıcı öğün saatinden itibaren sayılır; süre geçtiyse kurulmaz
+        schedulePostMealReminder(120, mealLabel(when.meal), savedAt).catch(() => {});
       }
       clearCart();
     }
@@ -370,10 +375,22 @@ export default function Calculator() {
               </View>
             ) : null}
             <SameAsBefore meal={when.meal} before={when.doseTime} />
-            <Row>
-              <Btn small variant="secondary" icon="restaurant" title={cart.length ? 'Yemek ekle / değiştir' : 'Yemek listesinden seç'} onPress={() => router.push('/pick-foods' as Href)} style={{ flexGrow: 1 }} />
-              <Btn small variant="secondary" icon="barcode-outline" title="Etiketten hesapla" onPress={() => setShowLabel(!showLabel)} style={{ flexGrow: 1 }} />
-            </Row>
+            <View style={{ gap: Space.sm, marginTop: Space.xs }}>
+              <Btn
+                small
+                variant="secondary"
+                icon="restaurant"
+                title={cart.length ? `Tabağı düzenle (${cart.length} çeşit · ${cartCarbs} g KH)` : "Yemek listesinden seç"}
+                onPress={() => router.push("/pick-foods" as Href)}
+              />
+              <Btn
+                small
+                variant="secondary"
+                icon="barcode-outline"
+                title={showLabel ? "Etiket hesaplayıcıyı kapat" : "Etiketten hesapla"}
+                onPress={() => setShowLabel(!showLabel)}
+              />
+            </View>
             {showLabel ? (
               <LabelCalculator
                 useLabel="Karbonhidrat olarak yaz"
@@ -557,3 +574,4 @@ const styles = StyleSheet.create({
   cartBox: { borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, padding: Space.md, gap: Space.xs },
   resultHead: { alignItems: 'center', gap: 4 },
 });
+

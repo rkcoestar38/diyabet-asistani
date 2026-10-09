@@ -73,7 +73,7 @@ export function useTheme(): Palette {
   return palettes[useScheme()];
 }
 
-export const Space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
+export const Space = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const Radius = { sm: 10, md: 14, lg: 20, pill: 999 } as const;
 
 /** Plus Jakarta Sans (tabular rakamlar ui.tsx'te); yüklenene kadar sistem yazı tipi */

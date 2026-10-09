@@ -253,9 +253,9 @@ export function manualBasalTests(log: LogEntry[], tests: { startTime: number; en
 
 /** Ana sayfa kartı için: önerilmesi gereken değişiklik var mı? */
 export function attention(all: Evaluation, settings: Pick<Settings, 'blocks'>, now: number): string | undefined {
-  const ev = recentEval(all, now);
+  // Öneriler tüm geçmişten, yeni kayıtlar ağırlıklı (öğün kartlarındaki öneriyle aynı)
   for (const kind of ['icr', 'isf'] as const) {
-    for (const s of blockSuggestions(ev[kind], settings.blocks, kind)) {
+    for (const s of blockSuggestions(all[kind].filter((x) => x.time <= now), settings.blocks, kind)) {
       if (s.suggested !== undefined && Math.abs(s.suggested - s.current) >= (kind === 'icr' ? 0.5 : 1)) {
         return kind === 'icr' ? 'Karbonhidrat oranın için güncelleme önerisi var.' : 'Düzeltme faktörün için güncelleme önerisi var.';
       }

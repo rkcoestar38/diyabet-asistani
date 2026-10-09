@@ -10,7 +10,7 @@ import { carbsOnBoard, insulinOnBoard, iobFraction, recentBolus } from '../iob';
 import { analyzeIcr, analyzeIsf, averageTdd, basalTestResult, estimateFromTdd, icrSample, isfSample } from '../ratios';
 import { computeStats } from '../stats';
 import { activeBlock, blockEnd, blockProblems, inLimit, parseHHMM, scheduleProblems } from '../schedule';
-import { awaitingPost, mealBefore, postOf } from '../postmeal';
+import { activeCountdownMeal, awaitingPost, mealBefore, postOf } from '../postmeal';
 import { backupDue } from '../../store/backup';
 import { attention, recentEval, basalSentence, basalSummary, blockSuggestions, evaluate, fastingWindows, mealGroupStats, periodSeries, trendOf, trendSentence } from '../optimizer';
 import { assessHypo, chooseRise, followUpSnack, hypoRiseSamples, personalRise, quickCarbOptions } from '../hypo';
@@ -39,6 +39,8 @@ const settings: Settings = {
   tabletG: 4,
   mealStarts: { gece: '00:00', sabah: '06:00', sabahAra: '09:30', ogle: '12:00', ogleAra: '15:00', aksam: '18:30', aksamAra: '21:00' },
   countMethod: 'exchange',
+  fastingRange: { low: 80, high: 120 },
+  postRange: { low: 120, high: 180 },
 };
 const profile = { dia: 4, peak: 75 };
 
@@ -561,8 +563,8 @@ describe('doctor report', () => {
     expect(html).toContain('07:30');
     expect(html).toContain('Simit 100 g &amp; ayran');
     expect(html).toContain('1 Ü = 10 g');
-    expect(html).toContain('NovoRapid');
-    expect(html).toContain('Tresiba');
+    expect(html).not.toContain('Hızlı etkili:');
+    expect(html).not.toContain('Optimal açlık:');
     expect(html).toContain('<svg');
     expect(html).toContain('Hipo tedavisi 15 g');
     expect(html).not.toContain('>300<');
@@ -784,6 +786,14 @@ describe('tokluk (yemek sonrası) şeker', () => {
     expect(postOf(log, log[0])?.id).toBe('p');
     expect(awaitingPost(log, t0 + 8000000)).toBeUndefined();
   });
+  it('geri sayım (widget) öğünü 0 dakikadan itibaren bulur; 4 saatten sonra bırakır', () => {
+    const log = [m('a', t0)];
+    expect(activeCountdownMeal(log, t0 + 5 * 60000)?.id).toBe('a');
+    expect(activeCountdownMeal(log, t0 + 230 * 60000)?.id).toBe('a');
+    expect(activeCountdownMeal(log, t0 + 250 * 60000)).toBeUndefined();
+    const done = [m('a', t0), { id: 'p', time: t0 + 7200000, bg: 150, post: true, afterId: 'a' } as import('../types').LogEntry];
+    expect(activeCountdownMeal(done, t0 + 8000000)).toBeUndefined();
+  });
   it('tokluk ölçümünü en yakın önceki yemeğe bağlar', () => {
     const log = [m('a', t0), m('b', t0 + 3600000)];
     expect(mealBefore(log, t0 + 3 * 3600000)?.id).toBe('b');
@@ -837,6 +847,13 @@ describe('gün sınırı (gece kayıtları önceki güne ait)', () => {
     // 00:00–24:00 tek bant: 06:00'ya kadar kısmı eksenin sonuna gider
     expect(st.toDayAxis(0, 1440)).toEqual([[1080, 1440], [0, 1080]]);
     expect(st.toDayAxis(600, 900)).toEqual([[240, 540]]);
+  });
+  it('gece yarısını saran akşam bloğu gün sonuna kadar tek parçadir (rapor bandı 00:00–06:00 kaybı yok)', () => {
+    st.setDayOffset(360);
+    // Akşam bloğu 18:30 → ertesi 06:00: bitiş +1440 ile verilir; bant eksen 750'den 1440'a (gün sonu) kadar sürecek
+    expect(st.toDayAxis(1110, 360 + 1440)).toEqual([[750, 1440]]);
+    // Ertesi 04:00'te biten blok: 18:30–04:00 = eksen 750–1320
+    expect(st.toDayAxis(1110, 240 + 1440)).toEqual([[750, 1320]]);
   });
 });
 

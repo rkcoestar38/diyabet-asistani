@@ -94,7 +94,7 @@ function StartTest({ kind }: { kind: TestKind }) {
       <Card title="Başlayalım" icon="play-circle">
         <Row>
           <Field label="Şu anki şekerin" suffix="mg/dL" value={bgText} onChangeText={setBgText} big placeholder="—" />
-          {kind === 'icr' ? <Field label="Öğünün karbonhidratı" suffix="g" value={carbText} onChangeText={setCarbText} big step={5} placeholder="0" /> : null}
+          {kind === 'icr' ? <Field label="Öğünün karbonhidratı" suffix="g" value={carbText} onChangeText={setCarbText} big step={1} placeholder="0" /> : null}
         </Row>
         {kind === 'icr' ? (
           <>

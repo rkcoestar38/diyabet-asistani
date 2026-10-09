@@ -1,5 +1,5 @@
-import { parseHHMM } from './schedule';
-import type { LogEntry, MealType } from './types';
+import { activeBlock, parseHHMM } from './schedule';
+import type { LogEntry, MealType, RatioMeal, TimeBlock } from './types';
 
 export const MEALS: { id: MealType; label: string; short: string; icon: string }[] = [
   { id: 'sabah', label: 'Sabah', short: 'Sabah', icon: 'sunny' },
@@ -107,3 +107,43 @@ export function mealScheduleProblems(starts: Record<MealType, string>): string[]
   return problems;
 }
 
+
+/* ---------------- Öğüne göre oranlar ---------------- */
+
+export const RATIO_MEALS: { id: RatioMeal; name: string; covers: string }[] = [
+  { id: 'sabah', name: 'Sabah', covers: 'kahvaltı ve sabah ara öğünü' },
+  { id: 'ogle', name: 'Öğle', covers: 'öğle yemeği ve öğle ara öğünü' },
+  { id: 'aksam', name: 'Akşam', covers: 'akşam yemeği, akşam ara öğünü ve gece' },
+];
+
+/** Ara öğünler ve gece, kendinden önceki ana öğünün oranını kullanır */
+export function ratioMealOf(m: MealType): RatioMeal {
+  if (m === 'sabah' || m === 'sabahAra') return 'sabah';
+  if (m === 'ogle' || m === 'ogleAra') return 'ogle';
+  return 'aksam';
+}
+
+/** Bir kaydın/dozun oranları: öğün biliniyorsa o öğünün dilimi, yoksa saatine göre */
+export function blockFor(blocks: TimeBlock[], time: number, meal?: MealType): TimeBlock | undefined {
+  if (meal) {
+    const own = blocks.find((b) => b.meal === ratioMealOf(meal));
+    if (own) return own;
+  }
+  return activeBlock(blocks, new Date(time));
+}
+
+/**
+ * Oranları her zaman üç ana öğüne (sabah, öğle, akşam) göre tutar; başlangıç saatleri öğün saatlerinden gelir.
+ * Eski ayarlarda (tek oran veya saat dilimleri) her öğüne, o öğünün saatinde geçerli olan oranlar kopyalanır.
+ */
+export function mealBlocks(blocks: TimeBlock[], starts: Record<MealType, string>, newId: () => string): TimeBlock[] {
+  return RATIO_MEALS.map(({ id, name }) => {
+    const own = blocks.find((b) => b.meal === id);
+    const start = Number.isNaN(parseHHMM(starts[id] ?? '')) ? (own?.start ?? DEFAULT_MEAL_STARTS[id]) : starts[id];
+    if (own) return { ...own, name, start };
+    const at = parseHHMM(start) + 60;
+    const src = activeBlock(blocks, new Date(2000, 0, 1, Math.floor(at / 60) % 24, at % 60)) ?? blocks[0];
+    const base = src ?? { icr: 10, isf: 50, target: 110, low: 80, high: 180 };
+    return { ...base, id: newId(), meal: id, name, start };
+  });
+}

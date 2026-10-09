@@ -76,13 +76,37 @@ export function toCsv(entries: LogEntry[], starts: Record<MealType, string> = DE
   return String.fromCharCode(0xfeff) + [header.join(';'), ...rows].join('\n');
 }
 
-/** HTML'den PDF üretip paylaşır (telefonda paylaşım menüsü, tarayıcıda yazdır/PDF kaydet). */
-export async function sharePdf(html: string, filename: string) {
-  const Print = await import('expo-print');
+/** Web'de HTML raporunu yeni pencerede/sekmede tam ekran açar */
+export function openHtmlReport(html: string, _title = 'Diyabet Raporu') {
   if (Platform.OS === 'web') {
-    await Print.printAsync({ html });
-    return;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
+}
+
+/** HTML'den PDF üretip paylaşır (telefonda paylaşım menüsü, tarayıcıda yazdır/PDF kaydet veya yeni sekmede aç). */
+export async function sharePdf(html: string, filename: string) {
+  if (Platform.OS === 'web') {
+    try {
+      const Print = await import('expo-print');
+      await Print.printAsync({ html });
+      return;
+    } catch {
+      // Tarayıcı güvenlik veya sandbox kısıtlaması nedeniyle printAsync hata verirse güvenli şekilde yeni sekmede aç
+      openHtmlReport(html, filename);
+      return;
+    }
+  }
+  const Print = await import('expo-print');
   const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
   // Anlamlı bir dosya adı için kopyalamayı dene; izin/okuma hatası olursa özgün dosyayı paylaş.
   let shareUri = uri;

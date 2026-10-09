@@ -1,5 +1,5 @@
 import { CARB_ABSORPTION_MIN, carbsOnBoard, insulinOnBoard, iobFraction } from './iob';
-import { activeBlock } from './schedule';
+import { blockFor } from './meals';
 import { startOfDay } from './stats';
 import type { InsulinProfile, LogEntry, TimeBlock } from './types';
 
@@ -77,6 +77,27 @@ export function median(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+/** Yeni kayıtların ağırlığı: bu kadar gün eski bir öğün, en yenisinin yarısı kadar sayılır */
+export const HALF_LIFE_DAYS = 14;
+
+/**
+ * Ağırlıklı ortanca: en yeni öğüne göre yaşı arttıkça ağırlığı yarılanır. Vücut değiştikçe öneri yeni kayıtlara
+ * daha çok yaslanır; ortanca olduğu için tek bir hatalı kayıt sonucu bozmaz.
+ */
+export function recentMedian(samples: { time: number; value: number }[]): number {
+  if (samples.length === 0) return NaN;
+  const latest = Math.max(...samples.map((x) => x.time));
+  const w = samples.map((x) => ({ v: x.value, w: 0.5 ** ((latest - x.time) / (HALF_LIFE_DAYS * 86400000)) })).sort((a, b) => a.v - b.v);
+  const total = w.reduce((t, x) => t + x.w, 0);
+  let acc = 0;
+  for (let i = 0; i < w.length; i++) {
+    acc += w[i].w;
+    if (acc > total / 2 + 1e-9) return w[i].v;
+    if (Math.abs(acc - total / 2) <= 1e-9) return (w[i].v + w[i + 1].v) / 2;
+  }
+  return w[w.length - 1].v;
+}
+
 export function clampChange(current: number, observed: number): number {
   return Math.min(current * (1 + MAX_CHANGE), Math.max(current * (1 - MAX_CHANGE), observed));
 }
@@ -140,8 +161,8 @@ export function icrSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   if (e.hypoCarbs) return { ok: false, reason: 'Hipo tedavisi içeren öğünler kullanılamaz.' };
   if (e.bgTime !== undefined && e.time - e.bgTime > 30 * 60000) return { ok: false, reason: 'Şeker, yemekten 30 dakikadan uzun süre önce ölçülmüş.' };
   if (e.exercise && e.exercise !== 'none') return { ok: false, reason: 'Egzersizli öğünler kullanılamaz.' };
-  const block = activeBlock(blocks, new Date(e.time));
-  if (!block) return { ok: false, reason: 'Saat dilimi bulunamadı.' };
+  const block = blockFor(blocks, e.time, e.meal);
+  if (!block) return { ok: false, reason: 'Öğün oranı bulunamadı.' };
   if (e.bg < block.low || e.bg > block.high) return { ok: false, reason: `Yemek öncesi şeker hedef aralıkta (${block.low}–${block.high}) değildi.` };
   const prior = priorActivity(sorted, i, profile);
   if (prior) return { ok: false, reason: prior };
@@ -171,8 +192,8 @@ export function isfSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   if (e.bg === undefined) return { ok: false, reason: 'Başlangıç şekeri kaydedilmemiş.' };
   if (e.hypoCarbs || (e.exercise && e.exercise !== 'none')) return { ok: false, reason: 'Egzersiz veya hipo içeren kayıtlar kullanılamaz.' };
   if (e.bgTime !== undefined && e.time - e.bgTime > 30 * 60000) return { ok: false, reason: 'Şeker, dozdan 30 dakikadan uzun süre önce ölçülmüş.' };
-  const block = activeBlock(blocks, new Date(e.time));
-  if (!block) return { ok: false, reason: 'Saat dilimi bulunamadı.' };
+  const block = blockFor(blocks, e.time, e.meal);
+  if (!block) return { ok: false, reason: 'Öğün oranı bulunamadı.' };
   if (e.bg <= block.high) return { ok: false, reason: `Başlangıç şekeri hedef aralığın üstünde (${block.high}+) olmalı.` };
   const prior = priorActivity(sorted, i, profile);
   if (prior) return { ok: false, reason: prior };
@@ -229,7 +250,7 @@ export function buildSuggestions(
     const samples = byBlock.get(b.id) ?? [];
     const cur = current(b);
     if (samples.length < MIN_SAMPLES) return { blockId: b.id, current: cur, samples };
-    const observed = median(samples.map((s) => s.value));
+    const observed = recentMedian(samples);
     const suggested = Math.round(clampChange(cur, observed) / step) * step;
     return { blockId: b.id, current: cur, observed: Math.round(observed * 10) / 10, suggested, samples };
   });

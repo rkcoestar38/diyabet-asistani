@@ -190,7 +190,7 @@ export function Card({
   );
 }
 
-type Variant = 'title' | 'h2' | 'body' | 'muted' | 'small' | 'big' | 'label';
+type Variant = 'title' | 'h2' | 'body' | 'muted' | 'small' | 'big' | 'label' | 'lead';
 
 const WEIGHT_TO_FONT: Record<string, string> = {
   '400': Font.regular,
@@ -516,6 +516,7 @@ const textStyles = StyleSheet.create({
   muted: { fontSize: 15, lineHeight: 22, fontFamily: Font.regular },
   small: { fontSize: 13, lineHeight: 19, fontFamily: Font.regular },
   label: { fontSize: 13, lineHeight: 17, fontFamily: Font.semibold, marginBottom: 6 },
+  lead: { fontSize: 20, lineHeight: 26, fontFamily: Font.regular, letterSpacing: -0.2 },
   big: { fontSize: 56, lineHeight: 62, fontFamily: Font.extrabold, letterSpacing: -2, fontVariant: ['tabular-nums'] },
 });
 
