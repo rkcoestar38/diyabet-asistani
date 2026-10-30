@@ -2,6 +2,20 @@
 
 const digitsOf = (s: string, max: number) => s.replace(/\D/g, '').slice(0, max);
 
+export type TimingInput = { date?: string; time?: string; bg?: string };
+
+export function timingProblem(input: TimingInput | undefined, doseTime: number, now: number): string | undefined {
+  if (!input) return undefined;
+  const day = parseDateInput(input.date ?? toDateInput(doseTime));
+  const minute = parseTimeInput(input.time ?? toTimeInput(doseTime));
+  if (day === undefined || minute === undefined) return 'Tarih ve saati tam yaz.';
+  const date = new Date(day);
+  date.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+  if (date.getTime() > now + 60000) return 'Gelecekteki bir zaman girilemez.';
+  if (input.bg !== undefined && parseTimeInput(input.bg) === undefined) return 'Ölçüm saatini tam yaz.';
+  return undefined;
+}
+
 /** "9" → "09", "930" → "09:30", "1745" → "17:45"; saat 23, dakika 59 ile sınırlanır. */
 export function formatTimeInput(raw: string): string {
   let d = digitsOf(raw, 4);

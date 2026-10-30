@@ -10,7 +10,8 @@ import { Card, KV, Notice, Screen, T, confirm, notify } from '@/components/ui';
 import { Space } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { MIN_SAMPLES, analyzeIcr, analyzeIsf, averageTdd, estimateFromTdd } from '@/logic/ratios';
+import { blockSuggestions, evaluate, reasonCategory } from '@/logic/optimizer';
+import { MIN_SAMPLES, RECENT_DAYS, averageTdd, estimateFromTdd } from '@/logic/ratios';
 import { blockEnd, sortBlocks } from '@/logic/schedule';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -51,18 +52,35 @@ export default function Learn() {
 
 function SuggestionsSection() {
   const settings = useSettings((s) => s.settings);
+  const history = useSettings((s) => s.ratioHistory);
+  const now = useNow(60000, history);
   const entries = useLog((s) => s.entries);
-  const profile = { dia: settings.dia, peak: settings.peak };
-  const icr = analyzeIcr(entries, settings.blocks, profile);
-  const isf = analyzeIsf(entries, settings.blocks, profile);
+  const evaluation = evaluate(entries, settings, now);
+  const icr = blockSuggestions(evaluation.icr, settings.blocks, 'icr', now, history);
+  const isf = blockSuggestions(evaluation.isf, settings.blocks, 'isf', now, history);
+  const recentIds = new Set(entries.filter((e) => e.time > now - RECENT_DAYS * 86400000 && e.time <= now).map((e) => e.id));
   const blocks = sortBlocks(settings.blocks);
 
   return (
     <Card title="Öneriler" icon="bulb-outline">
-      <T variant="muted">Her öğünün oranı, o öğünde yediğin karbonhidrat, öncesindeki şeker, vurduğun doz ve 2,5–5 saat sonraki şekerinden hesaplanır. Tüm geçmiş kayıtların sayılır; yeni kayıtlar daha ağırlıklıdır.</T>
+      <T variant="muted">Her öğün ayrı değerlendirilir. Öneriler son {RECENT_DAYS / 7} haftadan ve o öğünün son oran değişikliğinden sonraki kayıtlardan hesaplanır. Yeni kayıtlar daha ağırlıklıdır.</T>
+      <Notice level="info" text="2. saat tokluk ölçümü takip içindir. Oran analizi için 2,5–5 saat aralığında ek ölçüm gerekir. Hesap, ölçümden sonra etkisi sürecek insülini de tahmin eder." />
       {blocks.map((b) => (
         <View key={b.id} style={{ gap: Space.sm, marginTop: Space.xs }}>
           <T style={{ fontWeight: '700' }}>{`${b.name} öğünü (${b.start}–${blockEnd(settings.blocks, b)})`}</T>
+          <T variant="small">Ara öğünler de ait oldukları ana öğünün oranına katılır. Yeni bir öneri için en az {MIN_SAMPLES} uygun kayıt gerekir.</T>
+          {(() => {
+            const records = (evaluation.records ?? []).filter((r) => r.blockId === b.id && recentIds.has(r.entryId));
+            const pending = records.filter((r) => r.status === 'pending').length;
+            const rejected = records.filter((r) => r.status === 'rejected');
+            const reasons = [...new Set(rejected.map((r) => reasonCategory(r.reason ?? '').reason))];
+            const prior = records.filter((r) => r.status === 'used').length - (icr.find((s) => s.blockId === b.id)?.samples.length ?? 0) - (isf.find((s) => s.blockId === b.id)?.samples.length ?? 0);
+            return <>
+              <T variant="small">Son {RECENT_DAYS / 7} haftada {records.length} kayıt incelendi. {pending} ölçüm bekliyor, {rejected.length} kayıt analize uygun değil.</T>
+              {prior > 0 ? <T variant="small">{prior} uygun kayıt önceki oran dönemine ait. Geçmişte saklanır, yeni öneride kullanılmaz.</T> : null}
+              {reasons.map((reason) => <T key={reason} variant="small">{reason}</T>)}
+            </>;
+          })()}
           <SuggestionView kind="icr" s={icr.find((x) => x.blockId === b.id)!} blockId={b.id} />
           <SuggestionView kind="isf" s={isf.find((x) => x.blockId === b.id)!} blockId={b.id} />
         </View>

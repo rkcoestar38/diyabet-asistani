@@ -5,7 +5,7 @@ import { Btn, Card, KV, Notice, T, confirm, notify } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { useNow } from '@/lib/hooks';
 import { fmt } from '@/logic/bolus';
-import { RECENT_DAYS, basalSentence, basalSummary, evaluate, fastingWindows, mealGroupStats, periodSeries, recentEval, trendOf, trendSentence } from '@/logic/optimizer';
+import { RECENT_DAYS, basalSentence, basalSummary, blockSuggestions, evaluate, fastingWindows, periodSeries, trendOf, trendSentence } from '@/logic/optimizer';
 import { MAX_CHANGE, MIN_SAMPLES, type Suggestion } from '@/logic/ratios';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -29,9 +29,9 @@ export function SuggestionView({ kind, s, blockId }: { kind: 'icr' | 'isf'; s: S
       <T variant="h2">{title}</T>
       <KV k="Şu anki" v={`${fmt(s.current)} ${unit}`} />
       <KV k="Uygun test/kayıt" v={`${s.samples.length} / ${MIN_SAMPLES}`} />
-      {s.observed !== undefined ? <KV k="Kayıtlara göre gerçekleşen" v={`${fmt(s.observed)} ${unit}`} /> : null}
+      {s.observed !== undefined ? <KV k="Kayıtlardan tahmin edilen" v={`${fmt(s.observed)} ${unit}`} /> : null}
       {s.suggested === undefined ? (
-        <T variant="small">Henüz yeterli veri yok. Yukarıdaki testlerden birini yap.</T>
+        <T variant="small">Bu oranla en az {Math.max(0, MIN_SAMPLES - s.samples.length)} uygun kayıt daha gerekli. {kind === 'icr' ? 'Öğün öncesi şekeri, karbonhidratı, yaptığın dozu ve 2,5–5 saat sonraki ölçümü kaydet.' : 'Yemeksiz bir düzeltme kaydında başlangıç şekerini, yaptığın dozu ve 2,5–5 saat sonraki ölçümü kaydet. Araya yemek veya başka doz girerse bu kayıt kullanılmaz.'}</T>
       ) : changed ? (
         <>
           <KV k={`Öneri (en fazla %${MAX_CHANGE * 100} değişim)`} v={`${fmt(s.suggested)} ${unit}`} strong />
@@ -55,7 +55,7 @@ export function SuggestionView({ kind, s, blockId }: { kind: 'icr' | 'isf'; s: S
           />
         </>
       ) : (
-        <Notice level="info" text="Kayıtların bu oranın iyi çalıştığını gösteriyor." />
+        <Notice level="info" text="Bu kayıtlara göre oran değişikliği önerilmiyor." />
       )}
     </View>
   );
@@ -63,16 +63,23 @@ export function SuggestionView({ kind, s, blockId }: { kind: 'icr' | 'isf'; s: S
 
 /** Kayıtlardan sürekli hesaplanan oran ve bazal gidişatı: öğün bazında, dönem bazında ve öneriler (hiçbiri kendiliğinden uygulanmaz) */
 export function RatioTrend() {
-  const now = useNow(60000);
   const entries = useLog((s) => s.entries);
   const settings = useSettings((s) => s.settings);
+  const history = useSettings((s) => s.ratioHistory);
+  const now = useNow(60000, history);
   const update = useSettings((s) => s.update);
   const finished = useTests((s) => s.finished);
   const all = evaluate(entries, settings, now);
-  const ev = recentEval(all, now); // öneriler yalnızca son haftaların kayıtlarından
   const tIcr = trendOf(all.icr, now);
   const tIsf = trendOf(all.isf, now);
-  const groups = mealGroupStats(ev.icr, 'icr').filter((g) => g.n > 0);
+  const groups = blockSuggestions(all.icr, settings.blocks, 'icr', now, history).map((s) => ({
+    key: s.blockId,
+    label: settings.blocks.find((b) => b.id === s.blockId)?.name ?? '',
+    n: s.samples.length,
+    current: s.current,
+    observed: s.observed,
+    suggested: s.suggested,
+  }));
   const periods = periodSeries(all, now).filter((p) => p.icr.n > 0 || p.isf.n > 0);
   const windows = fastingWindows(entries, settings, now);
   const basal = basalSummary(windows, settings.basalDose);
@@ -86,7 +93,7 @@ export function RatioTrend() {
       <Card title="Oran gidişatı" icon="trending-up">
         <T variant="muted">
           Her gün girdiğin yemek, doz ve şeker kayıtlarından oranlarının gerçekte nasıl çalıştığı sürekli hesaplanır. Vücudundaki değişiklikler oranlarını etkilediyse burada
-          görürsün. Bu tablo son {RECENT_DAYS / 7} haftayı gösterir. Öğün önerileri tüm geçmişten hesaplanır, yeni kayıtlar daha ağırlıklı sayılır. Hiçbir değişiklik kendiliğinden uygulanmaz.
+          görürsün. Öğün tablosu, son {RECENT_DAYS / 7} haftanın son oran değişikliğinden sonraki kayıtlarını gösterir. Dönem tablosu geçmiş kayıtların tahmini oranlarını gösterir. Hiçbir değişiklik kendiliğinden uygulanmaz.
         </T>
         <Notice level={level(tIcr.verdict)} text={trendSentence('icr', tIcr)} />
         <Notice level={level(tIsf.verdict)} text={trendSentence('isf', tIsf)} />
@@ -107,7 +114,7 @@ export function RatioTrend() {
               Ayarlı
             </T>
             <T variant="small" style={styles.tnum}>
-              Gerçek
+              Tahmini
             </T>
             <T variant="small" style={styles.tnum}>
               Kayıt
@@ -131,7 +138,7 @@ export function RatioTrend() {
                   </T>
                 ) : g.suggested !== undefined ? (
                   <T variant="small" color="ok">
-                    Ayarlı oran bu öğünde iyi çalışıyor.
+                    Bu kayıtlara göre değişiklik önerilmiyor.
                   </T>
                 ) : (
                   <T variant="small">Öneri için en az {MIN_SAMPLES} uygun kayıt gerekli.</T>

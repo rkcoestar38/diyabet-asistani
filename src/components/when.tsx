@@ -1,11 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Collapsible } from '@/components/guide';
-import { DateField, Pressy, Row, T, TimeField } from '@/components/ui';
+import { DateField, Notice, Pressy, Row, T, TimeField } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
-import { parseDateInput, parseTimeInput, toDateInput, toTimeInput } from '@/lib/input';
+import { parseDateInput, parseTimeInput, timingProblem, toDateInput, toTimeInput, type TimingInput } from '@/lib/input';
 import { MEALS, mealAt, mealLabel, mealRange } from '@/logic/meals';
 import type { IconName } from '@/components/ui';
 import type { MealType } from '@/logic/types';
@@ -82,7 +81,7 @@ export function useWhen(now: number) {
   const bgTime = Math.min(draft.bgTime ?? doseTime, doseTime);
   const autoMeal = mealAt(doseTime, starts);
   const meal = draft.meal ?? autoMeal;
-  return { doseTime, bgTime, meal, autoMeal, isAuto: draft.meal === undefined, retro: draft.when !== undefined, bgEarlier: doseTime - bgTime >= 5 * 60000 };
+  return { doseTime, bgTime, meal, autoMeal, isAuto: draft.meal === undefined, retro: draft.when !== undefined, bgEarlier: doseTime - bgTime >= 5 * 60000, error: timingProblem(draft.timeInput, doseTime, now) };
 }
 
 function summary(doseTime: number, bgTime: number, now: number, retro: boolean) {
@@ -97,7 +96,8 @@ export function WhenCard({ now }: { now: number }) {
   const draft = useDraft();
   const w = useWhen(now);
   // Yalnızca kullanıcı yazarken tamamlanmamış metinleri tutar; geri kalan her şey taslaktan ve canlı saatten türetilir.
-  const [typing, setTyping] = useState<{ date?: string; time?: string; bg?: string }>({});
+  const typing = draft.timeInput ?? {};
+  const setTyping = (next: TimingInput | ((previous: TimingInput) => TimingInput)) => draft.set({ timeInput: typeof next === 'function' ? next(useDraft.getState().timeInput ?? {}) : next });
 
   const dateShown = typing.date ?? toDateInput(w.doseTime);
   const timeShown = typing.time ?? toTimeInput(w.doseTime);
@@ -138,6 +138,7 @@ export function WhenCard({ now }: { now: number }) {
   return (
     <View style={{ gap: Space.md }}>
       <MealChips value={w.meal} auto={w.isAuto} onChange={(m) => draft.set({ meal: m })} />
+      {w.error ? <Notice level="danger" text={w.error} /> : null}
       {w.retro ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space.sm }}>
           <T variant="small" style={{ flex: 1 }}>

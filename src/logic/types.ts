@@ -67,6 +67,16 @@ export type Settings = {
   postRange: { low: number; high: number };
 };
 
+export type RatioChange = {
+  time: number;
+  blockId?: string;
+  blockName: string;
+  field: 'icr' | 'isf';
+  from: number;
+  to: number;
+  source: string;
+};
+
 export type MealType = 'sabah' | 'sabahAra' | 'ogle' | 'ogleAra' | 'aksam' | 'aksamAra' | 'gece';
 
 export type LogItem = { id?: string; foodId: string; name: string; grams: number; carbs: number; fatty?: boolean };

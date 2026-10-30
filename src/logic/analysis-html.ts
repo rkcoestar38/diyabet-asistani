@@ -6,14 +6,13 @@ import {
   evaluate,
   fastingWindows,
   manualBasalTests,
-  mealGroupStats,
   periodSeries,
   recentEval,
   trendOf,
   trendSentence,
 } from './optimizer';
 import { MIN_SAMPLES } from './ratios';
-import type { LogEntry, Settings } from './types';
+import type { LogEntry, RatioChange, Settings } from './types';
 
 const esc = (s: string | number | undefined) =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -32,8 +31,9 @@ export function analysisHtml(input: {
   /** Değerlendirmenin bitişi (genelde rapor aralığının sonu veya şimdi) */
   now: number;
   basalTests?: { startTime: number; endTime: number }[];
+  ratioHistory?: RatioChange[];
 }): string {
-  const { entries, settings, now, basalTests = [] } = input;
+  const { entries, settings, now, basalTests = [], ratioHistory = [] } = input;
   const all = evaluate(entries, settings, now);
   const ev = recentEval(all, now); // öneriler ve öğün özeti son 6 haftadan
   const windows = fastingWindows(entries, settings, now);
@@ -42,7 +42,10 @@ export function analysisHtml(input: {
   const nothing = all.candidates.icr + all.candidates.isf === 0 && windows.length === 0 && manual.length === 0;
   if (nothing) return '';
 
-  const icrGroups = mealGroupStats(ev.icr, 'icr').filter((g) => g.n > 0);
+  const icrGroups = blockSuggestions(ev.icr, settings.blocks, 'icr', now, ratioHistory).map((s) => ({
+    label: settings.blocks.find((b) => b.id === s.blockId)?.name ?? '',
+    current: s.current, observed: s.observed, suggested: s.suggested, n: s.samples.length,
+  })).filter((g) => g.n > 0);
   const icrRows = icrGroups
     .map(
       (g) =>
@@ -51,7 +54,7 @@ export function analysisHtml(input: {
     .join('');
 
   const single = settings.blocks.length === 1;
-  const isfRows = blockSuggestions(ev.isf, settings.blocks, 'isf')
+  const isfRows = blockSuggestions(ev.isf, settings.blocks, 'isf', now, ratioHistory)
     .filter((s) => s.samples.length > 0)
     .map((s) => {
       const b = settings.blocks.find((x) => x.id === s.blockId)!;

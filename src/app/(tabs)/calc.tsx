@@ -8,7 +8,7 @@ import { SameAsBefore } from '@/components/same-meal';
 import { UpdateBanner } from '@/components/update-banner';
 import { WaterLevel } from '@/components/water';
 import { WhenCard, useWhen } from '@/components/when';
-import { Btn, Card, Field, KV, Notice, Pressy, Row, Screen, Segmented, T, Toggle, parseNum, useCountUp } from '@/components/ui';
+import { Btn, Card, Field, KV, Notice, Row, Screen, Segmented, T, Toggle, parseNum, useCountUp } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { currentTime, useCob, useIob, useNow } from '@/lib/hooks';
 import { toTimeInput } from '@/lib/input';
@@ -18,10 +18,10 @@ import { uid } from '@/store/storage';
 import { estimateBgAt } from '@/logic/bgtime';
 import { calcBolus, carbsForDose, carbsToTarget, checkBg, fmt } from '@/logic/bolus';
 import { carbsOnBoard, insulinOnBoard, recentBolus } from '@/logic/iob';
-import { mealLabel } from '@/logic/meals';
+import { blockFor, mealLabel } from '@/logic/meals';
 import { chooseRise, hypoRiseSamples } from '@/logic/hypo';
 import { icrSample } from '@/logic/ratios';
-import { activeBlock, blockEnd, scheduleProblems, sortBlocks } from '@/logic/schedule';
+import { blockEnd, scheduleProblems } from '@/logic/schedule';
 import type { ExerciseLevel, Warning } from '@/logic/types';
 import { useDraft } from '@/store/draft';
 import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
@@ -73,8 +73,6 @@ export default function Calculator() {
   }
   const [unitText, setUnitText] = useState('');
   const [exercise, setExercise] = useState<ExerciseLevel>('none');
-  // Elle seçilen dilim, yalnızca seçildiği andaki otomatik dilim geçerliyken kullanılır (saat ilerleyince sıfırlanır)
-  const [override, setOverride] = useState<{ id: string; auto: string } | null>(null);
   const [givenText, setGivenText] = useState('');
   const [showLabel, setShowLabel] = useState(false);
   const [testOffer, setTestOffer] = useState<string | null>(null);
@@ -82,7 +80,7 @@ export default function Calculator() {
 
   const problems = scheduleProblems(settings.blocks);
   // Oran dilimi, doz zamanına göre seçilir (geçmişe dönük kayıtta o saatin oranı)
-  const autoBlock = activeBlock(settings.blocks, new Date(when.doseTime));
+  const autoBlock = blockFor(settings.blocks, when.doseTime, when.meal);
   if (problems.length > 0 || !autoBlock) {
     return (
       <Screen>
@@ -98,8 +96,7 @@ export default function Calculator() {
   }
 
   const profile = { dia: settings.dia, peak: settings.peak };
-  const block =
-    override && override.auto === autoBlock.id ? (settings.blocks.find((b) => b.id === override.id) ?? autoBlock) : autoBlock;
+  const block = autoBlock;
   const multi = settings.blocks.length > 1;
   // Doz anındaki aktif insülin/karbonhidrat (geçmişe dönük kayıtta o ana göre)
   const iob = when.retro ? insulinOnBoard(entries, when.doseTime, profile) : iobNow;
@@ -148,6 +145,7 @@ export default function Calculator() {
   }
 
   function save(dose: number) {
+    if (when.error) return;
     const given = parseNum(givenText) ?? dose;
     const rule = cartMeatRule(cart);
     const items =
@@ -196,6 +194,7 @@ export default function Calculator() {
   }
 
   function saveMeasurement() {
+    if (when.error) return;
     if (bgMeasured === undefined) return;
     const entry = addLog({ time: when.bgEarlier || when.retro ? when.bgTime : currentTime(), bg: bgMeasured, meal: when.meal });
     cancelNotification('tokluk-hatirlatici').catch(() => {});
@@ -244,24 +243,6 @@ export default function Calculator() {
           </View>
         </WaterLevel>
       </>
-      {multi ? (
-        <View style={styles.chips}>
-          {sortBlocks(settings.blocks).map((b) => {
-            const active = b.id === block.id;
-            return (
-              <Pressy
-                key={b.id}
-                onPress={() => setOverride(b.id === autoBlock.id ? null : { id: b.id, auto: autoBlock.id })}
-                style={[styles.chip, { borderColor: active ? c.primary : c.border, backgroundColor: active ? c.primarySoft : c.card }]}>
-                <T variant="small" color={active ? 'primary' : 'muted'} style={{ fontWeight: '600' }}>
-                  {b.name}
-                  {b.id === autoBlock.id ? (when.retro ? ' (o saatte)' : ' (şimdi)') : ''}
-                </T>
-              </Pressy>
-            );
-          })}
-        </View>
-      ) : null}
       <>
         <Btn variant="dangerSoft" icon="alert-circle" title="Şekerim düşük (hipo)" onPress={() => router.push({ pathname: '/hypo', params: bgMeasured ? { bg: String(bgMeasured) } : {} })} />
       </>
@@ -325,7 +306,7 @@ export default function Calculator() {
           />
         ) : null}
         {bgMeasured !== undefined && (mode === 'meal' || mode === 'correction') ? (
-          <Btn small variant="secondary" icon="water-outline" title={`Sadece ölçümü kaydet (${toTimeInput(when.bgTime)})`} onPress={saveMeasurement} />
+          <Btn small variant="secondary" icon="water-outline" title={`Sadece ölçümü kaydet (${toTimeInput(when.bgTime)})`} disabled={!!when.error} onPress={saveMeasurement} />
         ) : null}
         {estimate && Math.abs(estimate.shift) >= 2 ? (
           <View style={{ gap: Space.sm }}>
@@ -469,7 +450,7 @@ export default function Calculator() {
               text="Tabağında yağlı/proteinli yiyecek var: şeker 3–5 saat sonra da yükselebilir. Yemekten 2–3 saat sonra tekrar ölç."
             />
           ) : null}
-          {bolus.status === 'ok' ? <SaveBox dose={bolus.dose} givenText={givenText} setGivenText={setGivenText} onSave={save} /> : null}
+          {bolus.status === 'ok' && !when.error ? <SaveBox dose={bolus.dose} givenText={givenText} setGivenText={setGivenText} onSave={save} /> : null}
         </Card>
       ) : null}
 
@@ -555,13 +536,15 @@ function SaveBox({
   setGivenText: (s: string) => void;
   onSave: (dose: number) => void;
 }) {
+  const actual = parseNum(givenText);
+  const invalid = givenText.trim() !== '' && (actual === undefined || actual < 0 || actual > 100);
   return (
     <View style={{ gap: Space.sm }}>
       <Row>
         <Field label="Vurduğun doz (farklıysa değiştir)" suffix="Ü" value={givenText} placeholder={fmt(dose)} onChangeText={setGivenText} step={0.5} base={dose} />
-        <Btn title="Kaydet" icon="checkmark" onPress={() => onSave(dose)} style={{ minWidth: 120 }} />
+        <Btn title="Kaydet" icon="checkmark" disabled={invalid} onPress={() => onSave(dose)} style={{ minWidth: 120 }} />
       </Row>
-      <T variant="small">Dozlarını kaydetmen, aktif insülin hesabı ve oranlarını öğrenmen için önemli.</T>
+      {invalid ? <Notice level="danger" text="Yaptığın dozu 0–100 Ü arasında bir sayı olarak yaz. Kayıt henüz kaydedilmedi." /> : <T variant="small">Dozlarını kaydetmen, aktif insülin hesabı ve oranlarını öğrenmen için önemli.</T>}
     </View>
   );
 }

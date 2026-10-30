@@ -194,7 +194,7 @@ export function carbsForDose(input: Omit<BolusInput, 'carbs'> & { units: number 
   // toplam = (yemek + düzeltme) × (1 − azaltma)  ⇒  yemek = toplam / (1 − azaltma) − düzeltme
   const mealUnits = units / (1 - reduction) - ref.correction;
   const carbs = Math.max(0, Math.floor(mealUnits * block.icr));
-  const warnings = [...bgCheck.warnings];
+  const warnings = [...ref.warnings];
   if (mealUnits <= 0) {
     warnings.push({ level: 'info', text: 'Bu doz yalnızca yüksek şekeri düzeltmeye yetiyor; karbonhidrat için pay kalmıyor.' });
   }

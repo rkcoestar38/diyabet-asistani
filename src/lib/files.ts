@@ -45,15 +45,16 @@ export async function pickText(): Promise<string | undefined> {
 
 const csvCell = (v: unknown) => {
   if (v === undefined || v === null) return '';
-  const s = String(v);
-  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const raw = typeof v === 'number' ? String(v).replace('.', ',') : String(v);
+  const s = typeof v === 'string' && /^(?:[\t\r\n]|\s*[=+\-@])/.test(raw) ? `'${raw}` : raw;
+  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
 const exerciseTr = { none: '', light: 'hafif', moderate: 'orta', intense: 'yoğun' } as const;
 
 /** Excel (Türkçe) uyumlu: ; ayraçlı, ondalık virgül */
 export function toCsv(entries: LogEntry[], starts: Record<MealType, string> = DEFAULT_MEAL_STARTS): string {
-  const num = (n?: number) => (n === undefined ? '' : String(n).replace('.', ','));
+  const num = (n?: number) => n ?? '';
   const header = ['Tarih', 'Saat', 'Öğün', 'Şeker (mg/dL)', 'Ölçüm saati', 'Karbonhidrat (g)', 'Hızlı insülin (Ü)', 'Bazal (Ü)', 'Hipo KH (g)', 'Keton', 'Egzersiz', 'Yemekler', 'Not'];
   const rows = entries.map((e) => {
     const d = new Date(e.time);

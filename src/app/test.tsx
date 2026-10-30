@@ -251,13 +251,15 @@ function ActiveTest() {
 /** Tek test sonucu + dilim ilerlemesi */
 function SampleResultCard({ kind, result }: { kind: 'icr' | 'isf'; result: Extract<SampleResult, { ok: true }> }) {
   const settings = useSettings((s) => s.settings);
+  const history = useSettings((s) => s.ratioHistory);
+  const now = useNow(60000, history);
   const entries = useLog((s) => s.entries);
   const block = settings.blocks.find((b) => b.id === result.blockId)!;
   const profile = { dia: settings.dia, peak: settings.peak };
   const current = kind === 'icr' ? block.icr : block.isf;
   const v = result.sample.value;
   const diff = (v - current) / current;
-  const suggestions = (kind === 'icr' ? analyzeIcr : analyzeIsf)(entries, settings.blocks, profile);
+  const suggestions = (kind === 'icr' ? analyzeIcr : analyzeIsf)(entries, settings.blocks, profile, now, history);
   const progress = suggestions.find((s) => s.blockId === block.id)!;
 
   let verdict: string;

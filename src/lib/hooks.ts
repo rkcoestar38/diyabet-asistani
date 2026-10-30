@@ -20,8 +20,13 @@ export function useHydrated() {
 }
 
 /** Her `ms` milisaniyede bir güncellenen zaman */
-export function useNow(ms = 30000) {
+export function useNow(ms = 30000, revision?: unknown) {
   const [now, setNow] = useState(() => Date.now());
+  const [seenRevision, setSeenRevision] = useState(() => revision);
+  if (seenRevision !== revision) {
+    setSeenRevision(() => revision);
+    setNow(currentTime());
+  }
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(id);

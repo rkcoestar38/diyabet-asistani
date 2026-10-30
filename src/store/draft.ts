@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { MealType } from '@/logic/types';
+import type { TimingInput } from '@/lib/input';
 
 /**
  * Hesapla/Yemekler/Kayıt ekranlarının paylaştığı geçici taslak (kalıcı değil):
@@ -13,9 +14,10 @@ type State = {
   when?: number;
   /** Şeker ölçüm zamanı (ms); yoksa yemek/doz zamanı */
   bgTime?: number;
+  timeInput?: TimingInput;
   /** Son değişiklik zamanı */
   touchedAt?: number;
-  set: (p: Partial<Pick<State, 'meal' | 'when' | 'bgTime'>>) => void;
+  set: (p: Partial<Pick<State, 'meal' | 'when' | 'bgTime' | 'timeInput'>>) => void;
   reset: () => void;
   /** Taslak `maxAgeMs`'den eskiyse sıfırlar: terk edilmiş bir seçim (örn. "1 saat önce") sonraki kayda taşınmaz */
   expire: (maxAgeMs: number) => void;
@@ -23,11 +25,11 @@ type State = {
 
 export const useDraft = create<State>((set, get) => ({
   set: (p) => set({ ...p, touchedAt: Date.now() }),
-  reset: () => set({ meal: undefined, when: undefined, bgTime: undefined, touchedAt: undefined }),
+  reset: () => set({ meal: undefined, when: undefined, bgTime: undefined, timeInput: undefined, touchedAt: undefined }),
   expire: (maxAgeMs) => {
-    const { touchedAt, meal, when, bgTime } = get();
-    if ((meal !== undefined || when !== undefined || bgTime !== undefined) && (touchedAt === undefined || Date.now() - touchedAt > maxAgeMs)) {
-      set({ meal: undefined, when: undefined, bgTime: undefined, touchedAt: undefined });
+    const { touchedAt, meal, when, bgTime, timeInput } = get();
+    if ((meal !== undefined || when !== undefined || bgTime !== undefined || timeInput !== undefined) && (touchedAt === undefined || Date.now() - touchedAt > maxAgeMs)) {
+      set({ meal: undefined, when: undefined, bgTime: undefined, timeInput: undefined, touchedAt: undefined });
     }
   },
 }));

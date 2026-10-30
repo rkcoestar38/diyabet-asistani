@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 import { DEFAULT_MEAL_STARTS, mealBlocks } from '@/logic/meals';
 import { parseHHMM } from '@/logic/schedule';
 import { setDayOffset } from '@/logic/stats';
-import type { Settings, TimeBlock } from '@/logic/types';
+import type { RatioChange, Settings, TimeBlock } from '@/logic/types';
 
 import { storage, uid } from './storage';
 
@@ -33,14 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   postRange: { low: 80, high: 180 },
 };
 
-export type RatioChange = {
-  time: number;
-  blockName: string;
-  field: 'icr' | 'isf';
-  from: number;
-  to: number;
-  source: string;
-};
+export type { RatioChange } from '@/logic/types';
 
 type State = {
   settings: Settings;
@@ -66,11 +59,11 @@ export const useSettings = create<State>()(
         set((st) => {
           const old = st.settings.blocks.find((b) => b.id === id);
           const history = [...st.ratioHistory];
-          if (old && source) {
+          if (old) {
             for (const field of ['icr', 'isf'] as const) {
               const to = patch[field];
               if (to !== undefined && to !== old[field]) {
-                history.unshift({ time: Date.now(), blockName: old.name, field, from: old[field], to, source });
+                history.unshift({ time: Date.now(), blockId: old.id, blockName: old.name, field, from: old[field], to, source: source ?? 'Elle düzenleme' });
               }
             }
           }

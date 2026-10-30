@@ -25,6 +25,7 @@ export function activeCountdownMeal(entries: LogEntry[], now: number): LogEntry 
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
     if (now - e.time > POST_UNTIL * MIN) return undefined;
+    if (e.time > now) continue;
     if (e.post || !e.carbs || e.carbs < 1) continue;
     if (!postOf(entries, e)) return e;
   }

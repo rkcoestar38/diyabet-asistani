@@ -28,9 +28,9 @@ import { parseDateInput, parseTimeInput, toDateInput, toTimeInput } from '@/lib/
 import { cancelNotification, schedulePostMealReminder } from '@/lib/notifications';
 import { syncToklukWidget } from '@/lib/widget-sync';
 import { BG_MAX, BG_MIN, fmt } from '@/logic/bolus';
+import { entryBgStatus, entryCartSignature, entryItemsToCart, entryPostOwnerId, withEntryMeatRule } from '@/logic/entry';
 import { MEALS, mealAt, mealLabel } from '@/logic/meals';
-import { mealBefore } from '@/logic/postmeal';
-import type { ExerciseLevel, LogEntry, LogItem, MealType } from '@/logic/types';
+import type { ExerciseLevel, LogEntry, LogItem, MealType, Settings } from '@/logic/types';
 import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
 import { useLog } from '@/store/log';
 import { useSettings } from '@/store/settings';
@@ -48,89 +48,31 @@ function parseDateTime(date: string, time: string): number | undefined {
   return res.getTime();
 }
 
-function getBgFeedback(bg: number | undefined, isPost: boolean) {
-  if (bg === undefined) return null;
-  if (bg < 70) {
-    return {
-      kind: 'hypo' as const,
-      label: '🚨 Düşük Şeker (Hipo)',
-      detail: 'Acil 15g hızlı karbonhidrat tüket (meyve suyu, kesme şeker).',
-      badgeBg: '#FDF0EE',
-      textColor: '#C23A2E',
-      borderColor: '#F8B4AF',
-    };
-  }
-  if (bg < 80) {
-    return {
-      kind: 'low-edge' as const,
-      label: '⚠️ Sınırda Düşük (70–79 mg/dL)',
-      detail: 'Hedefin hafif altında; düşüş eğilimine dikkat et.',
-      badgeBg: '#FEF7EA',
-      textColor: '#8A5300',
-      borderColor: '#FCDFA6',
-    };
-  }
-  if (isPost) {
-    if (bg <= 180) {
-      return {
-        kind: 'target' as const,
-        label: '✓ Hedefte (Tokluk 80–180 mg/dL)',
-        detail: 'Yemek sonrası 2. saat glikoz seviyen optimal aralıkta.',
-        badgeBg: '#EAF5EE',
-        textColor: '#1F7A4D',
-        borderColor: '#B0E2C6',
-      };
-    }
-    if (bg <= 220) {
-      return {
-        kind: 'high-mild' as const,
-        label: '▲ Hafif Yüksek (Tokluk > 180)',
-        detail: 'Hedefin biraz üzerinde; aktif insülini göz önünde bulundur.',
-        badgeBg: '#FEF7EA',
-        textColor: '#8A5300',
-        borderColor: '#FCDFA6',
-      };
-    }
-    return {
-      kind: 'high' as const,
-      label: '▲ Yüksek Şeker (> 220)',
-      detail: 'Hedefin belirgin üzerinde. Bol su iç ve düzeltme dozu değerlendir.',
-      badgeBg: '#FDF0EE',
-      textColor: '#C23A2E',
-      borderColor: '#F8B4AF',
-    };
-  } else {
-    if (bg <= 120) {
-      return {
-        kind: 'target' as const,
-        label: '✓ Hedefte (Açlık 80–120 mg/dL)',
-        detail: 'Açlık şekerin harika, tam hedeflenen aralıkta.',
-        badgeBg: '#EAF5EE',
-        textColor: '#1F7A4D',
-        borderColor: '#B0E2C6',
-      };
-    }
-    if (bg <= 150) {
-      return {
-        kind: 'high-mild' as const,
-        label: '▲ Hafif Yüksek (Açlık > 120)',
-        detail: 'Açlık hedefini biraz aşıyor.',
-        badgeBg: '#FEF7EA',
-        textColor: '#8A5300',
-        borderColor: '#FCDFA6',
-      };
-    }
-    return {
-      kind: 'high' as const,
-      label: '▲ Yüksek Şeker (> 150)',
-      detail: 'Açlık hedefin üzerinde. Öğün bolusunda düzeltme gerekebilir.',
-      badgeBg: '#FDF0EE',
-      textColor: '#C23A2E',
-      borderColor: '#F8B4AF',
-    };
-  }
+function getBgFeedback(bg: number | undefined, isPost: boolean, settings: Settings) {
+  if (bg === undefined || bg < BG_MIN || bg > BG_MAX) return null;
+  const range = isPost ? settings.postRange : settings.fastingRange;
+  const status = entryBgStatus(bg, isPost, settings);
+  if (status === 'hypo') return {
+    kind: 'hypo', label: 'Düşük şeker (hipo)',
+    detail: 'Düşük şeker ekranından tedavi adımlarını kontrol et.',
+    badgeBg: '#FDF0EE', textColor: '#C23A2E', borderColor: '#F8B4AF',
+  };
+  if (status === 'below') return {
+    kind: 'low-edge', label: `Hedefin altında (< ${range.low} mg/dL)`,
+    detail: 'Ayarlardaki hedef aralığının altında. Düşüş eğilimini takip et.',
+    badgeBg: '#FEF7EA', textColor: '#8A5300', borderColor: '#FCDFA6',
+  };
+  if (status === 'target') return {
+    kind: 'target', label: `Hedefte (${isPost ? 'Tokluk' : 'Açlık'} ${range.low}–${range.high} mg/dL)`,
+    detail: 'Ölçümün ayarlardaki hedef aralığında.',
+    badgeBg: '#EAF5EE', textColor: '#1F7A4D', borderColor: '#B0E2C6',
+  };
+  return {
+    kind: 'high', label: `Hedefin üzerinde (> ${range.high} mg/dL)`,
+    detail: 'Ölçümün ayarlardaki hedef aralığının üzerinde.',
+    badgeBg: '#FEF7EA', textColor: '#8A5300', borderColor: '#FCDFA6',
+  };
 }
-
 export default function Entry() {
   const c = useTheme();
   const localParams = useLocalSearchParams<{ id?: string; basal?: string; after?: string; mode?: string }>();
@@ -231,11 +173,11 @@ export default function Entry() {
     setCarbs(String(cartCarbs));
   };
 
-  const cartSig = cart.map((i) => i.id).join(',');
-  const [seenSig, setSeenSig] = useState(existing ? cartSig : '');
+  const cartSig = entryCartSignature(cart);
+  const [seenSig, setSeenSig] = useState(existing ? cartSig : entryCartSignature([]));
   if (cartSig !== seenSig) {
     setSeenSig(cartSig);
-    if (cart.length > 0) applyCart();
+    applyCart();
   }
   const itemsTotal = items ? Math.round(items.reduce((s, i) => s + i.carbs, 0)) : 0;
 
@@ -245,7 +187,7 @@ export default function Entry() {
     if (!items) return;
     const allFoods = [...useFoods.getState().customFoods, ...FOODS];
     const method = settings.countMethod;
-    const updated = items
+    const changed = items
       .map((it) => {
         if (idOf(it) !== rowId) return it;
         const newGrams = isDelta ? Math.max(0, it.grams + deltaOrGrams) : Math.max(0, deltaOrGrams);
@@ -255,6 +197,7 @@ export default function Entry() {
         return { ...it, grams: newGrams, carbs: c };
       })
       .filter((it): it is LogItem => it !== null);
+    const updated = withEntryMeatRule(changed, allFoods, method);
 
     setItems(updated.length ? updated : undefined);
     const totalC = updated.length ? Math.round(updated.reduce((s, it) => s + it.carbs, 0)) : 0;
@@ -263,7 +206,7 @@ export default function Entry() {
 
   function removeItem(rowId: string) {
     if (!items) return;
-    const updated = items.filter((it) => idOf(it) !== rowId);
+    const updated = withEntryMeatRule(items.filter((it) => idOf(it) !== rowId), [...useFoods.getState().customFoods, ...FOODS], settings.countMethod);
     setItems(updated.length ? updated : undefined);
     const totalC = updated.length ? Math.round(updated.reduce((s, it) => s + it.carbs, 0)) : 0;
     setCarbs(totalC > 0 ? String(totalC) : '');
@@ -272,16 +215,7 @@ export default function Entry() {
   function openFoodPicker() {
     if (items?.length) {
       useFoods.getState().setCart(
-        items
-          .filter((i) => i.foodId !== 'rule-meat')
-          .map((i) => ({
-            id: uid(),
-            foodId: i.foodId,
-            name: i.name,
-            grams: i.grams,
-            carbs: i.carbs,
-            fatty: i.fatty,
-          }))
+        entryItemsToCart(items, [...useFoods.getState().customFoods, ...FOODS], uid)
       );
     }
     router.push('/pick-foods' as Href);
@@ -306,8 +240,9 @@ export default function Entry() {
       exercise: exercise === 'none' ? undefined : exercise,
       note: note.trim() || undefined,
     };
-    const owner = post ? (afterSrc ?? mealBefore(entries, bgTime ?? savedAt, existing?.id)) : undefined;
-    const postFields = post ? { post: true, afterId: owner?.id } : { post: undefined, afterId: undefined };
+    const postFields = post
+      ? { post: true, afterId: entryPostOwnerId(entries, bgTime ?? savedAt, existing, afterSrc) }
+      : { post: undefined, afterId: undefined };
 
     let savedId: string | undefined;
     if (existing) {
@@ -318,7 +253,6 @@ export default function Entry() {
         bolus: undefined,
         basal: undefined,
         hypoCarbs: existing.hypoCarbs,
-        ketones: undefined,
         bgTime: undefined,
         items: undefined,
         foods: undefined,
@@ -355,7 +289,7 @@ export default function Entry() {
     }
   }
 
-  const feedback = getBgFeedback(values.bg, post);
+  const feedback = getBgFeedback(values.bg, post, settings);
 
   // ==========================================
   // COMPACT & REVOLUTIONIZED ŞEKER ÖLÇÜMÜ MODU

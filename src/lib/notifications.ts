@@ -77,11 +77,11 @@ const POST_MEAL_ID = 'tokluk-hatirlatici';
  * verilmezse kayıt anından itibaren sayar.
  */
 export async function schedulePostMealReminder(minutes = 120, mealLabelText?: string, mealTime?: number): Promise<string | undefined> {
+  const fireAt = mealTime !== undefined ? mealTime + minutes * 60000 : undefined;
+  if (fireAt !== undefined && fireAt <= Date.now()) return undefined;
   const N = load();
   if (!N || !(await ensurePermission(N))) return undefined;
   await N.cancelScheduledNotificationAsync(POST_MEAL_ID).catch(() => {});
-  const fireAt = mealTime !== undefined ? mealTime + minutes * 60000 : undefined;
-  if (fireAt !== undefined && fireAt <= Date.now()) return undefined;
   return N.scheduleNotificationAsync({
     identifier: POST_MEAL_ID,
     content: {

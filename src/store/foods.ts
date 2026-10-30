@@ -81,10 +81,12 @@ export const useFoods = create<State>()(
       },
       loadMeal: (id) => {
         const meal = get().meals.find((m) => m.id === id);
-        if (meal) set((st) => ({ cart: [...st.cart, ...meal.items.map((i) => ({ ...i, id: uid() }))] }));
+        if (!meal) return;
+        const items = currentMealItems(meal.items).map((item) => ({ ...item, id: uid() }));
+        set((st) => ({ cart: [...st.cart, ...items] }));
       },
       removeMeal: (id) => set((st) => ({ meals: st.meals.filter((m) => m.id !== id) })),
-      replaceAll: (s) => set(s),
+      replaceAll: (s) => set({ ...s, cart: [] }),
     }),
     { name: 'foods', storage, version: 1 },
   ),
@@ -92,6 +94,15 @@ export const useFoods = create<State>()(
 
 /** Değişim yönteminde öğünde 100 g üzeri et varsa eklenen karbonhidrat (g); yoksa 0 */
 export const cartMeatRule = (cart: CartItem[]) => meatRule(cart, useSettings.getState().settings.countMethod);
+
+export function currentMealItems(items: CartItem[]): CartItem[] {
+  const all = [...useFoods.getState().customFoods, ...FOODS];
+  const method = useSettings.getState().settings.countMethod;
+  return items.map((item) => {
+    const food = all.find((f) => f.id === item.foodId);
+    return food ? { ...item, carbs: carbsFor(food, item.grams, method), meat: food.meat } : item;
+  });
+}
 
 /** Sepetin toplam karbonhidratı (yönteme bağlı et kuralı dahil) */
 export const cartTotal = (cart: CartItem[]) => Math.round(cart.reduce((s, c) => s + c.carbs, 0) + cartMeatRule(cart));

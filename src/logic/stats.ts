@@ -59,7 +59,12 @@ export function computeStats(entries: LogEntry[], blocks: TimeBlock[], hypoThres
     carbs: Math.round(entries.reduce((s, e) => s + (e.carbs ?? 0) + (e.hypoCarbs ?? 0), 0)),
     bolus: Math.round(entries.reduce((s, e) => s + (e.bolus ?? 0), 0) * 10) / 10,
     basal: Math.round(entries.reduce((s, e) => s + (e.basal ?? 0), 0) * 10) / 10,
-    hypos: countEpisodes(entries.filter((e) => e.hypoCarbs || (e.bg !== undefined && e.bg < hypoThreshold)).map((e) => e.time)),
+    hypos: countEpisodes(entries.flatMap((e) => {
+      const events: number[] = [];
+      if (e.bg !== undefined && e.bg < hypoThreshold) events.push(e.bgTime ?? e.time);
+      if (e.hypoCarbs && !events.includes(e.time)) events.push(e.time);
+      return events;
+    })),
     days: new Set(entries.map((e) => startOfDay(e.time))).size,
   };
 }

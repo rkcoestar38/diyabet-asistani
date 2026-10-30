@@ -1,7 +1,9 @@
 import { carbsOnBoard, insulinOnBoard } from './iob';
-import { entryMeal } from './meals';
-import { MAX_CHANGE, MIN_SAMPLES, basalTestResult, buildSuggestions, clampChange, icrSample, isfSample, median, type Sample, type Suggestion } from './ratios';
-import type { LogEntry, MealType, Settings, TimeBlock } from './types';
+import { blockFor, entryMeal } from './meals';
+import { MAX_CHANGE, MIN_SAMPLES, RECENT_DAYS, basalTestResult, buildSuggestions, clampChange, icrSample, isfSample, median, type Sample, type Suggestion } from './ratios';
+import type { LogEntry, MealType, RatioChange, Settings, TimeBlock } from './types';
+
+export { RECENT_DAYS } from './ratios';
 
 const DAY = 86400000;
 const HOUR = 3600000;
@@ -21,11 +23,12 @@ export type EvalSample = Sample & { entryId: string; meal: MealType; group: Grou
 export type Evaluation = {
   icr: EvalSample[];
   isf: EvalSample[];
-  /** Analize girmeye aday kayıt sayıları (yemek veya düzeltme + doz + öncesi şeker var) */
+  /** Yemek ve düzeltme adayları; eksik doz veya başlangıç şekeri olanlar da sayılır. */
   candidates: { icr: number; isf: number };
   /** Analize girmeyen kayıtların nedenleri (çoktan aza); henüz beklenen testler sayılmaz */
   rejected: { reason: string; tip: string; count: number }[];
   pending: number;
+  records?: { entryId: string; blockId?: string; kind: 'icr' | 'isf'; status: 'used' | 'pending' | 'rejected'; reason?: string }[];
 };
 
 const CATEGORIES: [RegExp, string, string][] = [
@@ -33,7 +36,7 @@ const CATEGORIES: [RegExp, string, string][] = [
   [/dakikada başka bir yemek/, 'Ölçümden önce araya başka yemek, doz veya egzersiz girmiş', 'Öğünler arasında en az 3–4 saat bırakıldığında analiz daha doğru olur.'],
   [/hedef aralıkta/, 'Yemek öncesi şeker hedef aralığının dışındaydı', 'Hedef aralıktayken yenen öğünler oranı en güvenilir ölçer.'],
   [/Öncesinde/, 'Öncesinde etkisi süren insülin ya da sindirilen yemek vardı', 'Önceki dozdan ve yemekten sonra yeterince beklenen öğünler kullanılabilir.'],
-  [/Yemek öncesi şeker kaydedilmemiş|çok önce ölçülmüş|Başlangıç şekeri/, 'Yemek öncesi şeker eksik veya çok önce ölçülmüş', 'Yemekten hemen önce şekerini ölç ve kaydet.'],
+  [/Yemek öncesi şeker kaydedilmemiş|çok önce ölçülmüş|30 dakikadan uzun süre önce|Başlangıç şekeri/, 'Yemek öncesi şeker eksik veya çok önce ölçülmüş', 'Yemekten hemen önce şekerini ölç ve kaydet.'],
   [/Egzersiz|Hipo/, 'Egzersiz veya hipo tedavisi içeren öğün', 'Egzersizli öğünler oran analizine alınmaz.'],
   [/çok düştü|olağan dışı|çok küçük/, 'Sonuç güvenilir değil (şeker çok düştü, doz çok küçük ya da olağan dışı)', 'Kayıtları (karbonhidrat, doz, saat) kontrol et.'],
   [/10 g|vurulan doz|Düzeltme dozu/, 'Karbonhidrat çok az veya doz kaydedilmemiş', 'Dozu ve karbonhidratı her yemekte kaydet.'],
@@ -48,11 +51,12 @@ export function reasonCategory(reason: string): { reason: string; tip: string } 
 export function evaluate(log: LogEntry[], settings: Pick<Settings, 'blocks' | 'dia' | 'peak' | 'mealStarts'>, now: number): Evaluation {
   const profile = { dia: settings.dia, peak: settings.peak };
   const blockById = new Map(settings.blocks.map((b) => [b.id, b]));
-  const out: Evaluation = { icr: [], isf: [], candidates: { icr: 0, isf: 0 }, rejected: [], pending: 0 };
+  const records: NonNullable<Evaluation['records']> = [];
+  const out: Evaluation = { icr: [], isf: [], candidates: { icr: 0, isf: 0 }, rejected: [], pending: 0, records };
   const reasons = new Map<string, { tip: string; count: number }>();
 
   for (const e of log) {
-    if (e.post || !e.bolus || e.bg === undefined || e.hypoCarbs) continue;
+    if (e.time > now || e.post || (!e.carbs && !e.bolus)) continue;
     const kind = e.carbs ? 'icr' : 'isf';
     out.candidates[kind]++;
     const r = (kind === 'icr' ? icrSample : isfSample)(log, e.id, settings.blocks, profile, now);
@@ -60,8 +64,10 @@ export function evaluate(log: LogEntry[], settings: Pick<Settings, 'blocks' | 'd
       const meal = entryMeal(e, settings.mealStarts);
       const current = blockById.get(r.blockId)?.[kind] ?? 0;
       out[kind].push({ ...r.sample, entryId: e.id, meal, group: groupOf(meal), blockId: r.blockId, current, rel: current ? r.sample.value / current : 1 });
-    } else if (r.pending) out.pending++;
-    else {
+      records.push({ entryId: e.id, blockId: r.blockId, kind, status: 'used' });
+    } else {
+      records.push({ entryId: e.id, blockId: blockFor(settings.blocks, e.time, e.meal)?.id, kind, status: r.pending ? 'pending' : 'rejected', reason: r.reason });
+      if (r.pending) { out.pending++; continue; }
       const c = reasonCategory(r.reason);
       const x = reasons.get(c.reason) ?? { tip: c.tip, count: 0 };
       x.count++;
@@ -71,9 +77,6 @@ export function evaluate(log: LogEntry[], settings: Pick<Settings, 'blocks' | 'd
   out.rejected = [...reasons.entries()].map(([reason, v]) => ({ reason, tip: v.tip, count: v.count })).sort((a, b) => b.count - a.count);
   return out;
 }
-
-/** Öneriler yalnızca bu kadar günün kayıtlarından hesaplanır: vücut değiştiyse eski kayıtlar güncel oranı yansıtmaz */
-export const RECENT_DAYS = 42;
 
 /** Değerlendirmenin yalnızca son RECENT_DAYS günlük örnekleri (öneri ve öğün özeti için) */
 export function recentEval(ev: Evaluation, now: number): Evaluation {
@@ -104,10 +107,10 @@ export function mealGroupStats(samples: EvalSample[], kind: 'icr' | 'isf'): Grou
 }
 
 /** Saat dilimine göre öneriler (uygulanabilir olanlar) */
-export function blockSuggestions(samples: EvalSample[], blocks: TimeBlock[], kind: 'icr' | 'isf'): Suggestion[] {
+export function blockSuggestions(samples: EvalSample[], blocks: TimeBlock[], kind: 'icr' | 'isf', now = Date.now(), history: RatioChange[] = []): Suggestion[] {
   const by = new Map<string, Sample[]>();
   for (const s of samples) by.set(s.blockId, [...(by.get(s.blockId) ?? []), s]);
-  return buildSuggestions(blocks, by, (b) => b[kind], kind === 'icr' ? 0.5 : 1);
+  return buildSuggestions(blocks, by, (b) => b[kind], kind === 'icr' ? 0.5 : 1, now, history, kind);
 }
 
 export type Period = { from: number; to: number; icr: { n: number; value?: number }; isf: { n: number; value?: number } };
@@ -252,10 +255,9 @@ export function manualBasalTests(log: LogEntry[], tests: { startTime: number; en
 }
 
 /** Ana sayfa kartı için: önerilmesi gereken değişiklik var mı? */
-export function attention(all: Evaluation, settings: Pick<Settings, 'blocks'>, now: number): string | undefined {
-  // Öneriler tüm geçmişten, yeni kayıtlar ağırlıklı (öğün kartlarındaki öneriyle aynı)
+export function attention(all: Evaluation, settings: Pick<Settings, 'blocks'>, now: number, history: RatioChange[] = []): string | undefined {
   for (const kind of ['icr', 'isf'] as const) {
-    for (const s of blockSuggestions(all[kind].filter((x) => x.time <= now), settings.blocks, kind)) {
+    for (const s of blockSuggestions(all[kind], settings.blocks, kind, now, history)) {
       if (s.suggested !== undefined && Math.abs(s.suggested - s.current) >= (kind === 'icr' ? 0.5 : 1)) {
         return kind === 'icr' ? 'Karbonhidrat oranın için güncelleme önerisi var.' : 'Düzeltme faktörün için güncelleme önerisi var.';
       }

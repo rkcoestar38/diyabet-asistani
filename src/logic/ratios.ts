@@ -1,7 +1,7 @@
 import { CARB_ABSORPTION_MIN, carbsOnBoard, insulinOnBoard, iobFraction } from './iob';
 import { blockFor } from './meals';
 import { startOfDay } from './stats';
-import type { InsulinProfile, LogEntry, TimeBlock } from './types';
+import type { InsulinProfile, LogEntry, RatioChange, TimeBlock } from './types';
 
 export type TddEstimate = {
   /** 500 kuralı: g/Ü */
@@ -48,6 +48,7 @@ export function averageTdd(log: LogEntry[], now: number, days: number): { tdd: n
 }
 
 export const MIN_SAMPLES = 3;
+export const RECENT_DAYS = 42;
 /** Tek seferde önerilen en fazla değişiklik (%) */
 export const MAX_CHANGE = 0.2;
 
@@ -121,21 +122,21 @@ type FollowUp = { entry?: LogEntry; reason?: string; pending?: boolean };
  */
 function followUp(sorted: LogEntry[], idx: number, win: { min: number; max: number; ideal: number }, now: number): FollowUp {
   const start = sorted[idx];
+  const measurementTime = (e: LogEntry) => e.bgTime ?? e.time;
+  const intervention = sorted.find((e) => e.id !== start.id && e.time >= start.time && e.time <= now && e.time <= start.time + win.max * 60000 && isIntervention(e));
   let best: LogEntry | undefined;
   const better = (e: LogEntry) =>
-    !best || Math.abs((e.time - start.time) / 60000 - win.ideal) < Math.abs((best.time - start.time) / 60000 - win.ideal);
-  for (let j = idx + 1; j < sorted.length; j++) {
-    const e = sorted[j];
-    const dt = (e.time - start.time) / 60000;
-    if (dt > win.max) break;
-    const inWindow = dt >= win.min;
-    if (e.bg !== undefined && inWindow && better(e)) best = e;
-    if (isIntervention(e)) {
-      if (!inWindow) return { reason: `${Math.round(dt)}. dakikada başka bir yemek, doz, hipo tedavisi veya egzersiz kaydı var; sonuç ölçülemedi.` };
-      break;
-    }
+    !best || Math.abs((measurementTime(e) - start.time) / 60000 - win.ideal) < Math.abs((measurementTime(best) - start.time) / 60000 - win.ideal);
+  for (const e of sorted) {
+    const time = measurementTime(e);
+    const dt = (time - start.time) / 60000;
+    if (e.id === start.id || e.bg === undefined || time > now || dt < win.min || dt > win.max) continue;
+    if (e.afterId !== undefined && e.afterId !== start.id) continue;
+    if (intervention && (intervention.time < time || (intervention.time === time && intervention.id !== e.id))) continue;
+    if (better(e)) best = e;
   }
   if (best) return { entry: best };
+  if (intervention) return { reason: `${Math.round((intervention.time - start.time) / 60000)}. dakikada başka bir yemek, doz, hipo tedavisi veya egzersiz kaydı var; sonuç ölçülemedi.` };
   const elapsed = (now - start.time) / 60000;
   if (elapsed < win.max) return { pending: true, reason: elapsed < win.min ? `Ölçüm için ${Math.ceil(win.min - elapsed)} dk daha bekle.` : 'Şimdi şekerini ölç ve kaydet.' };
   return { reason: `${Math.round(win.min / 60)}–${Math.round(win.max / 60)} saat sonra ölçüm kaydedilmemiş.` };
@@ -155,6 +156,7 @@ export function icrSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   const i = locate(sorted, entryId);
   const e = sorted[i];
   if (!e) return { ok: false, reason: 'Kayıt bulunamadı.' };
+  if (e.time > now || (e.bgTime !== undefined && e.bgTime > e.time)) return { ok: false, reason: 'Başlangıç ölçümü veya öğün zamanı gelecekte.' };
   if (!e.carbs || e.carbs < 10) return { ok: false, reason: 'En az 10 g karbonhidratlı bir öğün gerekli.' };
   if (!e.bolus) return { ok: false, reason: 'Öğün için vurulan doz kaydedilmemiş.' };
   if (e.bg === undefined) return { ok: false, reason: 'Yemek öncesi şeker kaydedilmemiş.' };
@@ -169,7 +171,7 @@ export function icrSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   const fu = followUp(sorted, i, ICR_WINDOW, now);
   if (!fu.entry) return { ok: false, reason: fu.reason!, pending: fu.pending };
   const post = fu.entry.bg!;
-  const minutes = (fu.entry.time - e.time) / 60000;
+  const minutes = ((fu.entry.bgTime ?? fu.entry.time) - e.time) / 60000;
   const remainingInsulin = e.bolus * iobFraction(minutes, profile);
   const remainingCarbs = e.carbs * Math.max(0, 1 - minutes / CARB_ABSORPTION_MIN);
   const eventual = post - remainingInsulin * block.isf + remainingCarbs * (block.isf / block.icr);
@@ -187,6 +189,7 @@ export function isfSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   const i = locate(sorted, entryId);
   const e = sorted[i];
   if (!e) return { ok: false, reason: 'Kayıt bulunamadı.' };
+  if (e.time > now || (e.bgTime !== undefined && e.bgTime > e.time)) return { ok: false, reason: 'Başlangıç ölçümü veya doz zamanı gelecekte.' };
   if (e.carbs) return { ok: false, reason: 'Düzeltme testi karbonhidratsız olmalı.' };
   if (!e.bolus) return { ok: false, reason: 'Düzeltme dozu kaydedilmemiş.' };
   if (e.bg === undefined) return { ok: false, reason: 'Başlangıç şekeri kaydedilmemiş.' };
@@ -200,7 +203,7 @@ export function isfSample(log: LogEntry[], entryId: string, blocks: TimeBlock[],
   const fu = followUp(sorted, i, ISF_WINDOW, now);
   if (!fu.entry) return { ok: false, reason: fu.reason!, pending: fu.pending };
   const post = fu.entry.bg!;
-  const minutes = (fu.entry.time - e.time) / 60000;
+  const minutes = ((fu.entry.bgTime ?? fu.entry.time) - e.time) / 60000;
   const acted = e.bolus * (1 - iobFraction(minutes, profile));
   if (acted <= 0.2) return { ok: false, reason: 'Doz çok küçük; sonuç güvenilir değil.' };
   const value = (e.bg - post) / acted;
@@ -229,15 +232,15 @@ function collect(
 }
 
 /** Karbonhidrat oranı analizi: dilim başına uygun öğünlerin ortancası. */
-export function analyzeIcr(log: LogEntry[], blocks: TimeBlock[], profile: InsulinProfile, now = Date.now()): Suggestion[] {
+export function analyzeIcr(log: LogEntry[], blocks: TimeBlock[], profile: InsulinProfile, now = Date.now(), history: RatioChange[] = []): Suggestion[] {
   const byBlock = collect(log, blocks, profile, (e) => !!(e.carbs && e.bolus && e.bg !== undefined), icrSample, now);
-  return buildSuggestions(blocks, byBlock, (b) => b.icr, 0.5);
+  return buildSuggestions(blocks, byBlock, (b) => b.icr, 0.5, now, history, 'icr');
 }
 
 /** Düzeltme faktörü analizi: dilim başına uygun yemeksiz düzeltmelerin ortancası. */
-export function analyzeIsf(log: LogEntry[], blocks: TimeBlock[], profile: InsulinProfile, now = Date.now()): Suggestion[] {
+export function analyzeIsf(log: LogEntry[], blocks: TimeBlock[], profile: InsulinProfile, now = Date.now(), history: RatioChange[] = []): Suggestion[] {
   const byBlock = collect(log, blocks, profile, (e) => !!(!e.carbs && e.bolus && e.bg !== undefined), isfSample, now);
-  return buildSuggestions(blocks, byBlock, (b) => b.isf, 1);
+  return buildSuggestions(blocks, byBlock, (b) => b.isf, 1, now, history, 'isf');
 }
 
 export function buildSuggestions(
@@ -245,9 +248,16 @@ export function buildSuggestions(
   byBlock: Map<string, Sample[]>,
   current: (b: TimeBlock) => number,
   step: number,
+  now = Date.now(),
+  history: RatioChange[] = [],
+  kind?: 'icr' | 'isf',
 ): Suggestion[] {
   return blocks.map((b) => {
-    const samples = byBlock.get(b.id) ?? [];
+    const cutoff = history.reduce((latest, change) => {
+      const matches = change.blockId !== undefined ? change.blockId === b.id : change.blockName === b.name;
+      return matches && change.time <= now && (kind === 'icr' || change.field === kind) ? Math.max(latest, change.time) : latest;
+    }, now - RECENT_DAYS * 86400000);
+    const samples = (byBlock.get(b.id) ?? []).filter((sample) => sample.time > cutoff && sample.time <= now);
     const cur = current(b);
     if (samples.length < MIN_SAMPLES) return { blockId: b.id, current: cur, samples };
     const observed = recentMedian(samples);

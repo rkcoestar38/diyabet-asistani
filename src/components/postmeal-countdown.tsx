@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Pressy, T } from '@/components/ui';
 import { Radius, Space, useTheme } from '@/constants/theme';
+import { useNow } from '@/lib/hooks';
 import { mealAt, mealLabel } from '@/logic/meals';
 import { activeCountdownMeal } from '@/logic/postmeal';
 import type { LogEntry } from '@/logic/types';
@@ -18,19 +19,10 @@ export function PostMealCountdownWidget({ entries }: Props) {
   const c = useTheme();
   const router = useRouter();
   const settings = useSettings((s) => s.settings);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(1000, entries);
 
   // En son yenilen ve henüz tokluk şekeri girilmemiş yemek (son 4 saat içinde)
   const activeMeal = React.useMemo(() => activeCountdownMeal(entries, now), [entries, now]);
-
-  // Aktif yemek varsa her saniye geri sayımı güncelle
-  useEffect(() => {
-    if (!activeMeal) return;
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [activeMeal]);
 
   if (!activeMeal) return null;
 

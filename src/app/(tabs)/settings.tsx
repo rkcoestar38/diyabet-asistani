@@ -8,6 +8,8 @@ import { Btn, Card, Field, Notice, Row, Screen, Segmented, T, TimeField, Toggle,
 import { useThemePref, type ThemePref } from '@/store/theme';
 import { notificationsSupported, notificationsUnsupportedReason, scheduledBasal, syncBasalReminder } from '@/lib/notifications';
 import { backupNow } from '@/lib/backup';
+import { parseBackup } from '@/logic/backup';
+import { useDraft } from '@/store/draft';
 import { useTests } from '@/store/tests';
 import { pickText } from '@/lib/files';
 import { isWeb } from '@/lib/web';
@@ -311,27 +313,17 @@ function Backup() {
     try {
       const text = await pickText();
       if (!text) return;
-      const data = JSON.parse(text);
-      if (data?.app !== 'diyabet-asistani' || !Array.isArray(data.log) || !data.settings?.blocks) {
-        notify('Geçersiz dosya', 'Bu dosya bir Diyabet Asistanı yedeği değil.');
-        return;
-      }
+      const data = parseBackup(text, DEFAULT_SETTINGS);
       confirm(
         'Yedeği geri yükle',
         `${data.log.length} kayıt ve ayarlar yüklenecek. Bu cihazdaki mevcut veriler yedektekilerle DEĞİŞTİRİLECEK.`,
         () => {
-          useSettings.getState().replaceAll({ ...DEFAULT_SETTINGS, ...data.settings, onboarded: true }, data.ratioHistory ?? []);
+          useSettings.getState().replaceAll({ ...data.settings, onboarded: true }, data.ratioHistory);
           useLog.getState().replaceAll(data.log);
-          useFoods.getState().replaceAll({
-            customFoods: data.foods?.customFoods ?? [],
-            favorites: data.foods?.favorites ?? [],
-            meals: data.foods?.meals ?? [],
-          });
+          useFoods.getState().replaceAll(data.foods);
           // Oran testi geçmişi (v2 yedeklerde var; eskilerde yoktur)
-          useTests.setState({
-            finished: Array.isArray(data.tests?.finished) ? data.tests.finished : [],
-            active: data.tests?.active ?? null,
-          });
+          useTests.setState(data.tests);
+          useDraft.getState().reset();
           notify('Geri yüklendi', 'Verilerin yüklendi. Oranlarını Ayarlar/Oranlar sekmesinden kontrol et.');
         },
         'Geri yükle',

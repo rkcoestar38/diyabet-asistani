@@ -17,25 +17,23 @@ export type RiseSample = { time: number; carbs: number; before: number; after: n
 export function hypoRiseSamples(log: LogEntry[], blocks: TimeBlock[], profile: InsulinProfile): RiseSample[] {
   const sorted = [...log].sort((a, b) => a.time - b.time);
   const out: RiseSample[] = [];
-  sorted.forEach((e, i) => {
+  sorted.forEach((e) => {
     if (!e.hypoCarbs || e.hypoCarbs < 5 || e.hypoCarbs > 60 || e.bg === undefined || e.carbs) return;
     const block = activeBlock(blocks, new Date(e.time));
     if (!block) return;
-    let next: LogEntry | undefined;
-    for (let j = i + 1; j < sorted.length; j++) {
-      const f = sorted[j];
-      const dt = (f.time - e.time) / 60000;
-      if (dt > CHECK_MAX) break;
-      if (dt >= CHECK_MIN && f.bg !== undefined) {
-        next = f;
-        break;
-      }
-      if (f.carbs || f.hypoCarbs || f.bolus) return; // arada müdahale var
-    }
+    const measuredAt = (entry: LogEntry) => entry.bgTime ?? entry.time;
+    const intervention = sorted.find((entry) => entry.id !== e.id && entry.time >= e.time && (entry.carbs || entry.hypoCarbs || entry.bolus));
+    const next = sorted.filter((entry) => {
+      const at = measuredAt(entry);
+      const minutes = (at - e.time) / 60000;
+      if (entry.id === e.id || entry.bg === undefined || minutes < CHECK_MIN || minutes > CHECK_MAX) return false;
+      return !intervention || intervention.time > at || (intervention.time === at && intervention.id === entry.id);
+    }).sort((a, b) => measuredAt(a) - measuredAt(b))[0];
     if (!next) return;
     const meals = sorted.filter((x) => x.id !== e.id && !x.hypoCarbs);
     if (carbsOnBoard(meals, e.time) > 5) return; // sindirilen yemek sonucu bozar
-    const acted = insulinOnBoard(sorted, e.time, profile) - insulinOnBoard(sorted, next.time, profile);
+    const precedingDoses = sorted.filter((entry) => entry.time <= e.time);
+    const acted = insulinOnBoard(precedingDoses, e.time, profile) - insulinOnBoard(precedingDoses, measuredAt(next), profile);
     const rise = (next.bg! - e.bg + Math.max(0, acted) * block.isf) / e.hypoCarbs;
     if (rise < 0.5 || rise > 15) return; // olağan dışı: yanlış kayıt veya ek müdahale
     out.push({ time: e.time, carbs: e.hypoCarbs, before: e.bg, after: next.bg!, rise });

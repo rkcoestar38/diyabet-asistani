@@ -112,7 +112,8 @@ function Tile({
 
 export default function Home() {
   const c = useTheme();
-  const now = useNow(30000);
+  const ratioHistory = useSettings((s) => s.ratioHistory);
+  const now = useNow(30000, ratioHistory);
   const settings = useSettings((s) => s.settings);
   const entries = useLog((s) => s.entries);
   const iob = useIob(now);
@@ -153,7 +154,7 @@ export default function Home() {
   );
   const bolus = todays.reduce((s, e) => s + (e.bolus ?? 0), 0);
   const waiting = awaitingPost(entries, now);
-  const advice = attention(evaluate(entries, settings, now), settings, now);
+  const advice = attention(evaluate(entries, settings, now), settings, now, ratioHistory);
 
   const [basalLater, setBasalLater] = useState(false);
   const basalDue = (() => {

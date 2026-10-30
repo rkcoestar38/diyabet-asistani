@@ -100,8 +100,12 @@ const r1 = (n: number | undefined, d = 1) => (n === undefined ? undefined : Math
 
 /** Öğün türüne göre özet: her öğünde ortalama şeker, karbonhidrat, insülin ve hipo sayısı */
 export function mealStats(entries: LogEntry[], settings: Settings): MealStat[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
   return MEALS.map((m) => {
-    const es = entries.filter((e) => entryMeal(e, settings.mealStarts) === m.id);
+    const es = entries.filter((e) => {
+      const owner = e.post && e.afterId ? byId.get(e.afterId) : undefined;
+      return entryMeal(owner ?? e, settings.mealStarts) === m.id;
+    });
     const withCarbs = es.filter((e) => e.carbs && !e.post);
     const rises = es
       .filter((e) => e.post && e.bg !== undefined)
@@ -300,7 +304,7 @@ export type ReportInput = {
   from: number;
   /** Aralığın bitişi (dahil değil; ertesi günün başlangıcı) */
   to: number;
-  ratioChanges?: { time: number; blockName: string; field: 'icr' | 'isf'; from: number; to: number }[];
+  ratioChanges?: { time: number; blockId?: string; blockName: string; field: 'icr' | 'isf'; from: number; to: number; source?: string }[];
   /** Biten rehberli bazal testleri */
   basalTests?: { startTime: number; endTime: number }[];
   generatedAt?: number;
@@ -425,7 +429,7 @@ ${
 ${changes ? `<h3>Dönem içindeki oran değişiklikleri</h3><ul>${changes}</ul>` : ''}`
     : '';
 
-  const analysisHtmlContent = sec.analysis ? analysisHtml({ entries: inRange, settings, now: to, basalTests }) : '';
+  const analysisHtmlContent = sec.analysis ? analysisHtml({ entries: inRange, settings, now: to, basalTests, ratioHistory: ratioChanges.map((change) => ({ ...change, source: change.source ?? '' })) }) : '';
   const chartHtmlContent = sec.chart && svg ? `<h2>Şeker grafiği</h2>${svg}` : '';
   const dailyLogsHtmlContent = sec.dailyLogs ? `<h2>Günlük kayıtlar (ölçüm, yemek ve insülin saatleriyle)</h2>${days || "<p>Bu aralıkta kayıt yok.</p>"}` : "";
 

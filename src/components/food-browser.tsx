@@ -24,7 +24,7 @@ import { MealChips, useWhen } from '@/components/when';
 import { SameAsBefore } from '@/components/same-meal';
 import { useNow } from '@/lib/hooks';
 import { useDraft } from '@/store/draft';
-import { cartMeatRule, cartTotal, useFoods } from '@/store/foods';
+import { cartMeatRule, cartTotal, currentMealItems, useFoods } from '@/store/foods';
 import { useSettings } from '@/store/settings';
 import { toast } from '@/store/toast';
 
@@ -175,7 +175,7 @@ export function FoodBrowser({ picker }: { picker?: boolean }) {
               <Pressable style={{ flex: 1 }} onPress={() => loadMeal(m.id)}>
                 <T>{m.name}</T>
                 <T variant="small">
-                  {cartTotal(m.items)} g · {m.items.map((i) => i.name).join(', ')}
+                  {cartTotal(currentMealItems(m.items))} g · {m.items.map((i) => i.name).join(', ')}
                 </T>
               </Pressable>
               <Btn small variant="secondary" title="Tabağa koy" onPress={() => loadMeal(m.id)} />
