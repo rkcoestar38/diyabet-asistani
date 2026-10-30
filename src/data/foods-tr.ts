@@ -64,6 +64,8 @@ export type Food = {
   fatty?: boolean;
   /** Hipo tedavisine uygun hızlı karbonhidrat */
   fast?: boolean;
+  /** Paketli ürün barkodu (Open Food Facts kaydı); etiketle doğrulamak için */
+  barcode?: string;
   custom?: boolean;
 };
 
@@ -72,6 +74,7 @@ export const CATEGORIES = [
   'Pilav, Makarna & Tahıl',
   'Çorbalar',
   'Ana Yemekler',
+  'Et, Balık & Sakatat',
   'Fast Food & Sokak',
   'Salata & Meze',
   'Kahvaltılık',
@@ -118,6 +121,23 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Böreklik yufka', 58, [P('1/8 adet', 15, 'porsiyon', 'dilim'), P('1/6 adet', 25, 'porsiyon', 'dilim'), P('1/4 adet', 40, 'porsiyon', 'çeyrek')]],
     ['Tuzlu / diyet bisküvi', 63, [P('1 adet', 6, 'adet', 'adet'), P('4 adet', 25, 'adet', 'adet')]],
     ['Un (buğday / pirinç / bezelye)', 76, [P('1 tatlı kaşığı', 7, 'olcu', 'kaşık'), P('1 yemek kaşığı silme', 10, 'olcu', 'kaşık'), P('3 silme yemek kaşığı', 20, 'olcu', 'kaşık'), P('1 su bardağı', 120, 'olcu', 'bardak')]],
+    ['Çok tahıllı / tahıllı ekmek', 42, [P('1 ince dilim', 25, 'boyut', 'dilim'), P('1 dilim', 35, 'boyut', 'dilim'), P('1 kalın dilim', 50, 'boyut', 'dilim')]],
+    ['Mısır ekmeği', 44, [P('1 dilim', 40, 'boyut', 'dilim'), P('1 küçük parça', 60, 'boyut', 'adet'), P('1 büyük dilim', 90, 'boyut', 'dilim')], 'fatty'],
+    ['Roll / sandviç ekmeği', 48, [P('1 küçük adet', 50, 'boyut', 'adet'), P('1 standart adet', 70, 'boyut', 'adet'), P('1 büyük adet', 110, 'boyut', 'adet')]],
+    ['Burger ekmeği (susamlı)', 50, [P('1 adet', 55, 'adet', 'adet'), P('1 büyük adet', 80, 'boyut', 'adet')]],
+    ['Tam buğday lavaş / dürüm', 50, [P('1 küçük boy', 40, 'boyut', 'adet'), P('1 standart boy (dürüm)', 70, 'boyut', 'adet')]],
+    ['Pide (sade, Ramazan dışı)', 50, [P('1/4 adet (çeyrek)', 80, 'porsiyon', 'çeyrek'), P('1/2 adet (yarım)', 160, 'porsiyon', 'yarım'), P('1 tam adet', 320, 'boyut', 'adet')]],
+    ['Krep / pankek (sade)', 30, [P('1 küçük adet', 40, 'boyut', 'adet'), P('1 standart adet', 70, 'boyut', 'adet'), P('3 adet (1 porsiyon)', 200, 'porsiyon', 'adet')], 'fatty'],
+    ['Peynirli / ıspanaklı börek (tepsi)', 28, [P('1 küçük dilim', 90, 'boyut', 'dilim'), P('1 standart dilim', 150, 'porsiyon', 'dilim'), P('1 büyük dilim', 220, 'boyut', 'dilim')], 'fatty'],
+    ['Kıymalı börek', 27, [P('1 küçük dilim', 100, 'boyut', 'dilim'), P('1 standart dilim', 160, 'porsiyon', 'dilim')], 'fatty'],
+    ['Çörek', 48, [P('1 küçük adet', 60, 'boyut', 'adet'), P('1 standart halka dilim', 80, 'boyut', 'adet'), P('1 büyük adet', 120, 'boyut', 'adet')], 'fatty'],
+    ['Katmer', 42, [P('1/4 adet', 60, 'porsiyon', 'çeyrek'), P('1/2 adet', 120, 'porsiyon', 'yarım'), P('1 tam adet', 240, 'boyut', 'adet')], 'fatty'],
+    ['Gözleme (ıspanaklı / patatesli)', 28, [P('1/2 adet', 110, 'porsiyon', 'yarım'), P('1 tam adet', 220, 'boyut', 'adet')], 'fatty'],
+    ['Etimek (peksimet)', 75, [P('1 adet', 8, 'adet', 'adet'), P('2 adet', 16, 'adet', 'adet'), P('4 adet', 32, 'adet', 'adet')]],
+    ['Diyet bisküvi (yulaflı / tahıllı)', 65, [P('1 adet', 7, 'adet', 'adet'), P('3 adet', 21, 'adet', 'adet'), P('5 adet', 35, 'adet', 'adet')]],
+    ['Nişasta (buğday / mısır)', 88, [P('1 tatlı kaşığı', 7, 'olcu', 'kaşık'), P('1 yemek kaşığı', 12, 'olcu', 'kaşık')]],
+    ['Galeta unu (ekmek kırıntısı)', 72, [P('1 yemek kaşığı', 9, 'olcu', 'kaşık'), P('3 yemek kaşığı', 27, 'olcu', 'kaşık')]],
+    ['Yulaf kepeği', 66, [P('1 yemek kaşığı', 8, 'olcu', 'kaşık'), P('2 yemek kaşığı', 16, 'olcu', 'kaşık')]],
   ],
   'Pilav, Makarna & Tahıl': [
     ['Pirinç pilavı', 30, [P('1 yemek kaşığı', 15, 'olcu', 'kaşık'), P('2 yemek kaşığı tepeleme', 50, 'olcu', 'kaşık'), P('1 kepçe', 100, 'olcu', 'kepçe'), P('1 su bardağı', 140, 'olcu', 'bardak'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
@@ -141,6 +161,20 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Yarma (aşurelik buğday)', 68, [P('3 yemek kaşığı dolusu', 25, 'olcu', 'kaşık')]],
     ['Kestane', 38, [P('2 orta boy', 20, 'boyut', 'adet'), P('4 orta boy', 40, 'boyut', 'adet'), P('6 büyük boy', 70, 'boyut', 'adet')]],
     ['Bardak mısır (yağsız)', 17, [P('4 yemek kaşığı taneli', 90, 'olcu', 'kaşık'), P('1 küçük bardak', 100, 'boyut', 'bardak'), P('1 büyük bardak', 180, 'boyut', 'bardak')]],
+    ['Bulgur (kuru)', 68, [P('1 yemek kaşığı dolusu', 13, 'olcu', 'kaşık'), P('3 yemek kaşığı dolusu', 40, 'olcu', 'kaşık'), P('1 çay bardağı', 60, 'olcu', 'bardak')]],
+    ['Pirinç (kuru)', 78, [P('1 yemek kaşığı silme', 13, 'olcu', 'kaşık'), P('1 çay bardağı', 60, 'olcu', 'bardak'), P('1 su bardağı', 150, 'olcu', 'bardak')]],
+    ['Makarna (kuru / pişmemiş)', 73, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('1 avuç / 1 küçük porsiyon', 50, 'boyut', 'avuç'), P('1 porsiyon (90 g)', 90, 'porsiyon', 'porsiyon')]],
+    ['Kinoa (haşlanmış)', 21, [P('3 yemek kaşığı', 60, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Nohut (haşlanmış)', 27, [P('3 yemek kaşığı', 70, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Kuru fasulye (haşlanmış)', 23, [P('3 yemek kaşığı', 70, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Mercimek (haşlanmış)', 20, [P('3 yemek kaşığı', 70, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Barbunya (kuru / pişmemiş)', 60, [P('2 yemek kaşığı dolusu', 25, 'olcu', 'kaşık'), P('1 çay bardağı', 60, 'olcu', 'bardak')]],
+    ['Geri kalan tahıl / kuskus (kuru)', 70, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('3 yemek kaşığı', 30, 'olcu', 'kaşık')]],
+    ['Karabuğday (haşlanmış)', 20, [P('3 yemek kaşığı', 60, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['İnce bulgur (haşlanmış)', 19, [P('3 yemek kaşığı', 60, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Pirinç patlağı / şişirilmiş pirinç', 80, [P('1 yemek kaşığı', 5, 'olcu', 'kaşık'), P('1 küçük kase', 15, 'olcu', 'kase')]],
+    ['Mısır tanesi (haşlanmış)', 19, [P('3 yemek kaşığı', 50, 'olcu', 'kaşık'), P('1 küçük kase', 100, 'olcu', 'kase')]],
+    ['Pirinç keki (patlak pirinç)', 82, [P('1 adet', 8, 'adet', 'adet'), P('2 adet', 16, 'adet', 'adet')]],
   ],
   'Çorbalar': [
     ['Mercimek çorbası', 8, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 küçük kase (150 ml)', 150, 'olcu', 'kase'), P('1 standart kase (200 ml)', 200, 'olcu', 'kase'), P('1 büyük kase (250 ml)', 250, 'porsiyon', 'kase')]],
@@ -153,6 +187,13 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['İşkembe çorbası', 2, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase', 250, 'olcu', 'kase')]],
     ['Şehriye çorbası', 6, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 küçük kase (150 ml)', 150, 'olcu', 'kase'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
     ['Pirinç çorbası', 7, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 küçük kase (150 ml)', 150, 'olcu', 'kase'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Ciğer çorbası (Arnavut / sakatat)', 4, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Tutmaç çorbası', 10, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Havuç çorbası', 7, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Kabak çorbası', 5, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Mantar çorbası', 5, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Mısır çorbası', 9, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')]],
+    ['Paça çorbası', 1, [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 kase (250 ml)', 250, 'olcu', 'kase')], 'fatty'],
   ],
   'Ana Yemekler': [
     ['Kuru fasulye', 13, [P('4 yemek kaşığı', 100, 'olcu', 'kaşık'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
@@ -179,6 +220,71 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['İçli köfte', 25, [P('1 küçük adet', 50, 'boyut', 'adet'), P('1 standart adet', 70, 'boyut', 'adet'), P('1 büyük adet', 90, 'boyut', 'adet')], 'fatty'],
     ['Mercimek köftesi', 25, [P('1 adet / sıkım', 30, 'adet', 'adet'), P('3 adet', 90, 'adet', 'adet'), P('5 adet (1 porsiyon)', 150, 'porsiyon', 'adet')]],
     ['Sebze yemeğindeki pirinç / bulgur (kaşık sayısı)', 450, [P('1 yemek kaşığı', 1, 'olcu', 'kaşık')]],
+    ['Etli nohut', 14, [P('4 yemek kaşığı', 100, 'olcu', 'kaşık'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Etli kuru fasulye', 12, [P('4 yemek kaşığı', 100, 'olcu', 'kaşık'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Tas kebabı', 6, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Saç kavurma', 1, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Kuzu tandır', 0, [P('1 küçük porsiyon', 100, 'boyut', 'porsiyon'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Fırın tavuk (but / baget)', 0, [P('1 but / baget', 120, 'boyut', 'adet'), P('2 baget', 200, 'adet', 'adet')], 'fatty'],
+    ['Tavuk şinitzel', 12, [P('1 küçük adet', 100, 'boyut', 'adet'), P('1 standart adet', 150, 'boyut', 'adet')], 'fatty'],
+    ['Tavuk kanat (fırın)', 0, [P('3-4 adet', 150, 'adet', 'adet')], 'fatty'],
+    ['Karnabahar kızartması', 12, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon'), P('1 büyük porsiyon', 220, 'boyut', 'porsiyon')], 'fatty'],
+    ['Fırında sebze (biber, patlıcan, kabak)', 6, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Kabak mücver', 13, [P('1 adet', 40, 'adet', 'adet'), P('3 adet (1 porsiyon)', 120, 'porsiyon', 'adet')], 'fatty'],
+    ['Patlıcan musakka (beşamel)', 9, [P('1 porsiyon', 250, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Zeytinyağlı yeşil fasulye (soğuk)', 5, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Fasulye pilaki', 14, [P('1/2 porsiyon', 100, 'porsiyon', 'yarım'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Zeytinyağlı enginar', 6, [P('1 adet', 150, 'adet', 'adet')]],
+    ['Zeytinyağlı pırasa', 5, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Zeytinyağlı bamya', 6, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Zeytinyağlı kereviz', 5, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Etli bezelye', 7, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Fırında tavuk şiş', 0, [P('1 şiş', 100, 'adet', 'adet'), P('2 şiş', 200, 'adet', 'adet')], 'fatty'],
+    ['Hamsi tava (unlanmış)', 6, [P('6-8 adet (1 porsiyon)', 150, 'porsiyon', 'adet')], 'fatty'],
+    ['Köfte (fırın / yağsız)', 6, [P('1 adet', 30, 'adet', 'adet'), P('4 adet (1 porsiyon)', 120, 'porsiyon', 'adet')]],
+    ['Sulu köfte', 8, [P('1 porsiyon', 250, 'porsiyon', 'porsiyon')]],
+    ['Kuru köfte (ekonomik köfte)', 12, [P('1 adet', 40, 'adet', 'adet'), P('3 adet (1 porsiyon)', 120, 'porsiyon', 'adet')], 'fatty'],
+    ['İzmir köfte', 7, [P('1 porsiyon', 250, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Beyti / kebap porsiyon', 12, [P('1/2 porsiyon', 160, 'porsiyon', 'yarım'), P('1 porsiyon', 320, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Adana / Urfa kebap', 8, [P('1 porsiyon (pide ile)', 250, 'porsiyon', 'porsiyon'), P('1.5 porsiyon', 350, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Döner (porsiyon, pilav/ekmeksiz)', 4, [P('1 küçük porsiyon', 100, 'boyut', 'porsiyon'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Fırında tavuk göğsü (derisiz)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Sucuklu yumurta', 2, [P('1 porsiyon (2 yumurta)', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Pastırma', 1, [P('2 ince dilim', 20, 'adet', 'dilim'), P('4 dilim', 40, 'adet', 'dilim')]],
+    ['Kavurma (dana)', 0, [P('2 yemek kaşığı', 30, 'olcu', 'kaşık'), P('1 küçük porsiyon', 50, 'boyut', 'porsiyon')], 'fatty'],
+    ['Salam', 2, [P('1 dilim', 10, 'adet', 'dilim'), P('3 dilim', 30, 'adet', 'dilim')]],
+    ['Sosis', 3, [P('1 adet', 40, 'adet', 'adet'), P('2 adet', 80, 'adet', 'adet')]],
+  ],
+  'Et, Balık & Sakatat': [
+    // Sakatat bileşim değerleri: USDA FoodData Central, SR Legacy, pişmiş 100 g
+    ['Ciğer (dana, pişmiş)', 5, [P('1 küçük porsiyon', 100, 'boyut', 'porsiyon'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon'), P('1 büyük porsiyon', 200, 'boyut', 'porsiyon')], 'fatty'],
+    ['Ciğer (kuzu, pişmiş)', 2.5, [P('1 küçük porsiyon', 100, 'boyut', 'porsiyon'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Arnavut ciğeri (kızarmış)', 8, [P('1 küçük porsiyon', 100, 'boyut', 'porsiyon'), P('1 standart porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Edirne tava ciğeri', 10, [P('1 porsiyon (4-5 yaprak)', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Ciğer şis / ciğer kavurma', 5, [P('1 şiş', 100, 'adet', 'adet'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Tavuk ciğeri (sote)', 1, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Karaciğer yapraklı dürüm / ciğer dürüm', 25, [P('1 adet', 250, 'adet', 'adet')], 'fatty'],
+    ['Kokoreç (porsiyon, ekmeksiz)', 2, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Kelle / paça eti (haşlanmış)', 1, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Dil (dana / kuzu, haşlanmış)', 0, [P('2 ince dilim', 60, 'boyut', 'dilim'), P('1 porsiyon', 120, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Böbrek (sote)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Yürek (dana / kuzu)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['İşkembe (haşlanmış)', 2, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Beyin (haşlanmış)', 1.5, [P('1/2 adet', 60, 'porsiyon', 'yarım'), P('1 porsiyon', 120, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Piliç (tavuk but, derisiz)', 0, [P('1 but', 120, 'adet', 'adet'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Hindi göğsü (haşlanmış / fırın)', 0, [P('1 porsiyon', 120, 'porsiyon', 'porsiyon'), P('2 parça', 150, 'adet', 'adet')]],
+    ['Hamsi (taze, ızgara)', 0, [P('8-10 adet', 150, 'adet', 'adet')]],
+    ['Levrek (ızgara / fırın)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Çipura (ızgara / fırın)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Somon (ızgara)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Sardalya (ızgara)', 0, [P('8 adet', 120, 'adet', 'adet')], 'fatty'],
+    ['Ton balığı (suda / yağsız)', 0, [P('1 yarım kutu (süzülmüş)', 60, 'porsiyon', 'yarım'), P('1 kutu (süzülmüş)', 120, 'adet', 'kutu')]],
+    ['Karides (ızgara / haşlanmış)', 1, [P('8-10 adet', 100, 'adet', 'adet'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Kalamar (tava)', 10, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Ahtapot (haşlanmış / ızgara)', 2, [P('1 porsiyon', 120, 'porsiyon', 'porsiyon')]],
+    ['İstiridye (midye içi)', 3, [P('6 adet', 60, 'adet', 'adet')]],
+    ['Alabalık (fırın)', 0, [P('1 adet (orta)', 200, 'boyut', 'adet')], 'fatty'],
+    ['Palamut / lüfer (ızgara)', 0, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')], 'fatty'],
   ],
   'Fast Food & Sokak': [
     ['Lahmacun', 35, [P('1 adet', 120, 'adet', 'adet'), P('1 küçük / fındık lahmacun', 60, 'boyut', 'adet'), P('1 büyük boy', 160, 'boyut', 'adet')], 'fatty'],
@@ -197,6 +303,20 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Midye dolma', 20, [P('1 küçük adet', 12, 'boyut', 'adet'), P('1 standart adet', 18, 'boyut', 'adet'), P('5 adet', 90, 'adet', 'adet')]],
     ['Balık ekmek', 25, [P('1/2 ekmek arası', 300, 'porsiyon', 'yarım')]],
     ['Kokoreç (yarım ekmek)', 15, [P('1/4 ekmek (çeyrek)', 150, 'porsiyon', 'çeyrek'), P('1/2 ekmek (yarım)', 300, 'porsiyon', 'yarım')], 'fatty'],
+    ['Tantuni (ekmek arası)', 25, [P('1 küçük adet', 150, 'boyut', 'adet'), P('1 standart adet', 220, 'boyut', 'adet')], 'fatty'],
+    ['Adana dürüm', 22, [P('1 adet', 300, 'adet', 'adet'), P('1 küçük boy', 220, 'boyut', 'adet')], 'fatty'],
+    ['Urfa / kıyma kebabı (ekmek arası ölçüsü)', 20, [P('1/2 ekmek (yarım)', 200, 'porsiyon', 'yarım'), P('1 tam ekmek', 400, 'boyut', 'adet')], 'fatty'],
+    ['Dürüm (tavuk / et sade)', 25, [P('1 küçük adet', 200, 'boyut', 'adet'), P('1 standart adet', 300, 'adet', 'adet')], 'fatty'],
+    ['Tost (karışık / kaşar-domates)', 29, [P('1 adet', 120, 'adet', 'adet'), P('1 çift katlı', 180, 'boyut', 'adet')], 'fatty'],
+    ['Dönerli porsiyon (pilavla)', 20, [P('1 porsiyon', 400, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Nugget (tavuk)', 20, [P('4 adet', 80, 'adet', 'adet'), P('6 adet (1 porsiyon)', 120, 'porsiyon', 'adet')], 'fatty'],
+    ['Sosisli sandviç (hot dog)', 27, [P('1 adet', 150, 'adet', 'adet')], 'fatty'],
+    ['Waffle / krep (dondurulmuş)', 45, [P('1 adet', 40, 'adet', 'adet'), P('2 adet', 80, 'adet', 'adet')], 'fatty'],
+    ['İşkembe / kelle paça (sokak porsiyonu)', 3, [P('1 kase', 300, 'olcu', 'kase')]],
+    ['Falafel dürüm / porsiyon', 20, [P('1 dürüm', 250, 'adet', 'adet'), P('5 adet (porsiyon)', 120, 'porsiyon', 'adet')], 'fatty'],
+    ['Pastırmalı yumurta (sokak kahvaltısı)', 3, [P('1 porsiyon', 180, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Simit + peynirli (kahvaltı menü)', 43, [P('1 adet simit + peynir', 120, 'adet', 'adet')], 'fatty'],
+    ['Dondurulmuş hazır pizza (kişi boy)', 30, [P('1 adet kişilik', 250, 'adet', 'adet')], 'fatty'],
   ],
   'Salata & Meze': [
     ['Çoban / yeşil salata', 4, [P('1 küçük kase', 100, 'boyut', 'kase'), P('1 standart kase', 150, 'olcu', 'kase'), P('1 büyük kase', 250, 'boyut', 'kase')]],
@@ -207,6 +327,18 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Acılı ezme', 8, [P('1 yemek kaşığı', 20, 'olcu', 'kaşık'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
     ['Patates salatası', 15, [P('2 yemek kaşığı', 60, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
     ['Rus salatası', 10, [P('1 yemek kaşığı', 30, 'olcu', 'kaşık'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Çoban salatası (limonlu)', 3, [P('1 küçük kase', 120, 'boyut', 'kase'), P('1 standart kase', 180, 'olcu', 'kase')]],
+    ['Gavurdağı salatası', 6, [P('1 porsiyon', 200, 'porsiyon', 'porsiyon')]],
+    ['Sezar salata', 4, [P('1 porsiyon (soslu)', 250, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Ton balıklı salata', 4, [P('1 büyük kase', 280, 'boyut', 'kase')], 'fatty'],
+    ['Tavuklu salata', 4, [P('1 büyük kase', 300, 'boyut', 'kase')]],
+    ['Zeytinyağlı semizotu (yoğurtlu)', 3, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Muhammara', 12, [P('1 yemek kaşığı', 20, 'olcu', 'kaşık'), P('1 porsiyon', 80, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Mercimekli meze (kısıra benzer, domates-biberli)', 18, [P('2 yemek kaşığı', 50, 'olcu', 'kaşık'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Mütebbel (patlıcanlı)', 10, [P('1 yemek kaşığı', 25, 'olcu', 'kaşık'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')], 'fatty'],
+    ['Tarator', 6, [P('1 yemek kaşığı', 20, 'olcu', 'kaşık'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Yoğurtlu semizotu', 4, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['İçli ekmek dolması (meze)', 12, [P('1 yemek kaşığı', 20, 'olcu', 'kaşık'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
   ],
   'Kahvaltılık': [
     ['Beyaz peynir', 1, [P('1 ince dilim (kibrit kutusu)', 30, 'boyut', 'dilim'), P('1 orta dilim', 50, 'boyut', 'dilim'), P('1 kalın dilim', 75, 'boyut', 'dilim')]],
@@ -225,6 +357,26 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Sucuk', 2, [P('3 ince dilim', 30, 'adet', 'dilim'), P('5 dilim', 50, 'adet', 'dilim')]],
     ['Domates', 4, [P('1 ince dilim', 30, 'boyut', 'dilim'), P('1 küçük boy', 80, 'boyut', 'adet'), P('1 orta boy', 120, 'boyut', 'adet'), P('1 büyük boy', 180, 'boyut', 'adet')]],
     ['Salatalık', 3, [P('1 küçük boy', 70, 'boyut', 'adet'), P('1 orta boy', 120, 'boyut', 'adet'), P('1 büyük boy', 180, 'boyut', 'adet')]],
+    ['Haşlanmış yumurta beyazı', 1, [P('1 adet', 35, 'adet', 'adet'), P('2 adet', 70, 'adet', 'adet')]],
+    ['Kaşarlı omlet', 2, [P('1 yumurtalı', 90, 'boyut', 'adet'), P('2 yumurtalı', 160, 'boyut', 'adet')], 'fatty'],
+    ['Yumurtalı ekmek (yumurta ekmeği)', 25, [P('1 adet', 70, 'adet', 'adet')], 'fatty'],
+    ['Sahanda yumurta', 1, [P('1 yumurta', 60, 'adet', 'adet'), P('2 yumurta', 120, 'adet', 'adet')], 'fatty'],
+    ['Beyaz peynir (yağsız / light)', 1, [P('1 dilim', 30, 'boyut', 'dilim'), P('1 kalın dilim', 50, 'boyut', 'dilim')]],
+    ['Ezine peyniri', 1, [P('1 dilim', 30, 'boyut', 'dilim')]],
+    ['Köy peyniri', 1, [P('1 dilim', 35, 'boyut', 'dilim')]],
+    ['Dil peyniri', 1, [P('1 dilim', 20, 'adet', 'dilim'), P('2 dilim', 40, 'adet', 'dilim')]],
+    ['Hellim (ızgara)', 2, [P('1 dilim', 30, 'boyut', 'dilim')], 'fatty'],
+    ['Çökelek', 2, [P('1 yemek kaşığı', 25, 'olcu', 'kaşık'), P('1 çay bardağı', 60, 'olcu', 'bardak')]],
+    ['Tereyağı', 0, [P('1 tatlı kaşığı', 5, 'olcu', 'kaşık'), P('1 yemek kaşığı', 10, 'olcu', 'kaşık')], 'fatty'],
+    ['Krema (yemeklik)', 3, [P('1 yemek kaşığı', 15, 'olcu', 'kaşık')], 'fatty'],
+    ['Kaymak', 3, [P('1 tatlı kaşığı', 8, 'olcu', 'kaşık'), P('1 yemek kaşığı', 15, 'olcu', 'kaşık')], 'fatty'],
+    ['Yeşil zeytin', 4, [P('3 adet', 12, 'adet', 'adet'), P('5 adet', 20, 'adet', 'adet')]],
+    ['Siyah zeytin', 4, [P('3 adet', 12, 'adet', 'adet'), P('5 adet', 20, 'adet', 'adet')]],
+    ['Fındık ezmesi', 15, [P('1 tatlı kaşığı', 10, 'olcu', 'kaşık'), P('1 yemek kaşığı', 15, 'olcu', 'kaşık')], 'fatty'],
+    ['Pesto / renkli kahvaltılık sos', 4, [P('1 tatlı kaşığı', 7, 'olcu', 'kaşık'), P('1 yemek kaşığı', 15, 'olcu', 'kaşık')], 'fatty'],
+    ['Ihlamur / bitki çayı (şekersiz)', 0, [P('1 fincan', 200, 'olcu', 'kupa')]],
+    ['Yeşil / siyah çay (şekersiz)', 0, [P('1 çay bardağı', 100, 'olcu', 'bardak'), P('1 kupa', 200, 'olcu', 'kupa')]],
+    ['Yumurta sarısı', 1, [P('1 adet', 15, 'adet', 'adet'), P('2 adet', 30, 'adet', 'adet')]],
   ],
   'Süt & İçecekler': [
     ['Süt', 4.8, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak'), P('1 büyük kupa (250 ml)', 250, 'olcu', 'kupa')]],
@@ -244,6 +396,24 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Sıcak çikolata', 11, [P('1 fincan / kupa (250 ml)', 250, 'olcu', 'kupa')]],
     ['Boza', 20, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
     ['Bira', 3.6, [P('1 kutu (330 ml)', 330, 'adet', 'kutu'), P('1 şişe (500 ml)', 500, 'adet', 'şişe')]],
+    ['Şarap', 0.3, [P('1 kadeh (100 ml)', 100, 'olcu', 'kadeh'), P('1 büyük kadeh (150 ml)', 150, 'olcu', 'kadeh')]],
+    ['Rakı (sade)', 0, [P('1 kadeh (50 ml)', 50, 'olcu', 'kadeh')]],
+    ['Yayık ayranı', 3, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
+    ['Laktozsuz süt', 4.8, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak'), P('1 kupa (250 ml)', 250, 'olcu', 'kupa')]],
+    ['Yağsız süt', 4.9, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak'), P('1 kupa (250 ml)', 250, 'olcu', 'kupa')]],
+    ['Bitkisel süt (badem / soya, şekersiz)', 2, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
+    ['Süzme peynirli / meyveli ayran (şekersiz)', 3, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
+    ['Elma suyu', 11.3, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')], 'fast'],
+    ['Portakal / mandalina nektarı', 11, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 kutu (200 ml)', 200, 'adet', 'kutu')], 'fast'],
+    ['Meyve suyu (100%, şekersiz)', 10, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')], 'fast'],
+    ['Oral rehidrasyon / izotonik içecek', 6, [P('1 şişe (500 ml)', 500, 'adet', 'şişe'), P('1 bardak (250 ml)', 250, 'olcu', 'bardak')], 'fast'],
+    ['Şekerli çay / kahve (bir küp şeker)', 100, [P('1 çay bardağı + 1 küp şeker', 100, 'olcu', 'bardak'), P('1 kupa + 1 küp şeker', 200, 'olcu', 'kupa')], 'fast'],
+    ['Kefirli ayran (kefir)', 4.5, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
+    ['Greyfurt suyu (taze)', 9, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')], 'fast'],
+    ['Maden suyu (sade)', 0, [P('1 şişe (200 ml)', 200, 'adet', 'şişe')]],
+    ['Kola zero / diyet içecek (large)', 0, [P('1 kutu (330 ml)', 330, 'adet', 'kutu'), P('1 şişe (500 ml)', 500, 'adet', 'şişe')]],
+    ['Şekersiz limonata (ev yapımı)', 2, [P('1 su bardağı (200 ml)', 200, 'olcu', 'bardak')]],
+    ['Enerji içeceği (şekerli)', 11, [P('1 kutu (250 ml)', 250, 'adet', 'kutu')], 'fast'],
   ],
   'Meyveler': [
     ['Elma', 12, [P('1 dilim', 25, 'porsiyon', 'dilim'), P('1 küçük boy', 100, 'boyut', 'adet'), P('1 orta boy', 140, 'boyut', 'adet'), P('1 büyük boy', 190, 'boyut', 'adet')]],
@@ -274,6 +444,25 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Kuru kayısı', 50, [P('1 adet orta', 8, 'boyut', 'adet'), P('3 adet (1 porsiyon)', 25, 'porsiyon', 'adet')]],
     ['Kuru incir', 55, [P('1 küçük adet', 15, 'boyut', 'adet'), P('1 büyük adet', 25, 'boyut', 'adet')]],
     ['Kuru dut', 65, [P('1 yemek kaşığı', 8, 'olcu', 'kaşık'), P('2 yemek kaşığı (1 porsiyon)', 20, 'olcu', 'kaşık')]],
+    ['Kayısı (kuru, gün kurusu)', 58, [P('2 adet', 16, 'adet', 'adet'), P('4 adet (1 porsiyon)', 30, 'porsiyon', 'adet')]],
+    ['Erik (kuru)', 55, [P('2 adet', 16, 'adet', 'adet'), P('4 adet', 32, 'adet', 'adet')]],
+    ['Kayısı (dut kurusu)', 66, [P('1 yemek kaşığı', 8, 'olcu', 'kaşık'), P('3 yemek kaşığı', 25, 'olcu', 'kaşık')]],
+    ['Frenk üzümü / kuş üzümü', 12, [P('1 çay bardağı', 80, 'olcu', 'bardak'), P('1 kase', 140, 'olcu', 'kase')]],
+    ['Trabzon hurması (cennet hurması)', 18, [P('1/2 orta boy', 120, 'porsiyon', 'yarım'), P('1 orta boy', 200, 'boyut', 'adet')]],
+    ['Mango', 15, [P('1/2 orta boy (küp)', 100, 'porsiyon', 'yarım'), P('1 orta boy (soyulmuş)', 200, 'boyut', 'adet')]],
+    ['Kivi (altın)', 14, [P('1 küçük boy', 70, 'boyut', 'adet'), P('1 orta boy', 90, 'boyut', 'adet')]],
+    ['Üzüm (kırmızı / salkım)', 16, [P('10 tane', 50, 'adet', 'adet'), P('1 küçük salkım', 100, 'boyut', 'adet')]],
+    ['Böğürtlen', 5, [P('1 çay bardağı', 80, 'olcu', 'bardak'), P('1 kase', 150, 'olcu', 'kase')]],
+    ['Ahududu', 5, [P('1 çay bardağı', 80, 'olcu', 'bardak'), P('1 kase', 150, 'olcu', 'kase')]],
+    ['Yaban mersini (blueberry)', 12, [P('1 çay bardağı', 90, 'olcu', 'bardak'), P('1 kase', 150, 'olcu', 'kase')]],
+    ['Kayısı (konserve, hafif şuruplu)', 12, [P('1 orta adet + 1 yemek kaşığı şurup', 60, 'porsiyon', 'adet')], 'fast'],
+    ['Şeftali (konserve)', 12, [P('1/2 adet + 1 yemek kaşığı şurup', 60, 'porsiyon', 'adet')], 'fast'],
+    ['Karpuz (kış kavunu alternatifi)', 7, [P('1 dilim', 200, 'boyut', 'dilim')]],
+    ['Mor elma', 12, [P('1 orta boy', 130, 'boyut', 'adet')]],
+    ['Kumkuat (küçük mandalina)', 12, [P('5 adet', 100, 'adet', 'adet')]],
+    ['Pomelo', 9, [P('1/2 orta boy', 150, 'porsiyon', 'yarım')]],
+    ['Avokado (yarım, çatal kaşık)', 2, [P('1/2 adet', 70, 'porsiyon', 'yarım')]],
+    ['Dondurulmuş meyve (karışık, şekersiz)', 10, [P('1 çay bardağı', 100, 'olcu', 'bardak'), P('1 kase', 150, 'olcu', 'kase')]],
   ],
   'Kuruyemiş': [
     ['Fındık', 7, [P('1 tatlı kaşığı', 8, 'olcu', 'kaşık'), P('1 yemek kaşığı', 15, 'olcu', 'kaşık'), P('1 küçük avuç', 20, 'boyut', 'avuç'), P('1 avuç', 30, 'boyut', 'avuç')]],
@@ -283,6 +472,16 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Kaju', 27, [P('10 adet', 15, 'adet', 'adet'), P('1 avuç', 30, 'boyut', 'avuç')]],
     ['Leblebi', 50, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('1/2 çay bardağı', 25, 'olcu', 'bardak'), P('1 avuç', 30, 'boyut', 'avuç')]],
     ['Ay çekirdeği (iç)', 12, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('1 avuç', 30, 'boyut', 'avuç')]],
+    ['Kabak çekirdeği (iç)', 12, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('1 avuç', 30, 'boyut', 'avuç')]],
+    ['Fıstık (yer fıstığı)', 16, [P('10 adet', 15, 'adet', 'adet'), P('1 avuç', 30, 'boyut', 'avuç')]],
+    ['Kestane (kavrulmuş, soyulmuş)', 45, [P('3 adet', 30, 'adet', 'adet'), P('6 adet', 60, 'adet', 'adet')]],
+    ['Limonlu / baharatlı badem (çiğ)', 9, [P('1 avuç', 25, 'boyut', 'avuç')]],
+    ['Susam', 23, [P('1 tatlı kaşığı', 5, 'olcu', 'kaşık'), P('1 yemek kaşığı', 9, 'olcu', 'kaşık')]],
+    ['Keten tohumu', 29, [P('1 tatlı kaşığı', 4, 'olcu', 'kaşık'), P('1 yemek kaşığı', 9, 'olcu', 'kaşık')]],
+    ['Chia tohumu', 42, [P('1 tatlı kaşığı', 4, 'olcu', 'kaşık'), P('1 yemek kaşığı', 9, 'olcu', 'kaşık')]],
+    ['Sarı leblebi (kavrulmuş)', 60, [P('1 yemek kaşığı', 10, 'olcu', 'kaşık'), P('1 avuç', 30, 'boyut', 'avuç')]],
+    ['Kuş üzümü (kuru)', 70, [P('1 tatlı kaşığı', 5, 'olcu', 'kaşık'), P('1 yemek kaşığı', 10, 'olcu', 'kaşık')]],
+    ['Badem unu', 20, [P('1 yemek kaşığı', 8, 'olcu', 'kaşık')]],
   ],
   'Tatlılar & Atıştırmalık': [
     ['Baklava', 50, [P('1 küçük dilim', 35, 'boyut', 'dilim'), P('1 standart dilim', 40, 'boyut', 'dilim'), P('2 dilim (1 porsiyon)', 80, 'porsiyon', 'dilim')], 'fatty'],
@@ -314,6 +513,28 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Sütlü çikolata', 55, [P('1 kare', 5, 'adet', 'kare'), P('4 kare / 1 satır', 20, 'adet', 'kare'), P('1 tablet paket', 80, 'boyut', 'paket')], 'fatty'],
     ['Bitter çikolata (%70)', 35, [P('1 kare', 5, 'adet', 'kare'), P('4 kare / 1 satır', 20, 'adet', 'kare')], 'fatty'],
     ['Cips', 50, [P('1 küçük paket', 40, 'boyut', 'paket'), P('1 büyük paket', 100, 'boyut', 'paket')], 'fatty'],
+    ['Antep fıstıklı baklava (burma)', 52, [P('1 adet (küçük)', 30, 'adet', 'adet'), P('1 standart burma', 55, 'adet', 'adet')], 'fatty'],
+    ['Sütlü nuriye / fıstıklı sarma', 50, [P('1 adet', 45, 'adet', 'adet'), P('2 adet', 90, 'adet', 'adet')], 'fatty'],
+    ['Kalburabastı', 50, [P('1 adet', 45, 'adet', 'adet'), P('2 adet', 90, 'adet', 'adet')], 'fatty'],
+    ['Saray helvası / yaz helvası', 60, [P('1 küçük dilim', 25, 'boyut', 'dilim'), P('1 dilim', 40, 'boyut', 'dilim')], 'fatty'],
+    ['Bülbül yuvası', 48, [P('1 adet', 50, 'adet', 'adet')], 'fatty'],
+    ['Krem şokola (soslu kek)', 40, [P('1 dilim', 100, 'boyut', 'dilim'), P('1 büyük dilim', 150, 'boyut', 'dilim')], 'fatty'],
+    ['Brownie', 45, [P('1 kare', 50, 'boyut', 'kare'), P('1 büyük kare', 90, 'boyut', 'kare')], 'fatty'],
+    ['Donut (sade / çikolatalı)', 48, [P('1 adet', 60, 'adet', 'adet'), P('1 büyük adet', 90, 'boyut', 'adet')], 'fatty'],
+    ['Muffin', 45, [P('1 küçük adet', 50, 'boyut', 'adet'), P('1 standart adet', 80, 'boyut', 'adet')], 'fatty'],
+    ['Dondurmalı sandviç', 35, [P('1 adet', 70, 'adet', 'adet')], 'fatty'],
+    ['Meyveli sorbet', 22, [P('1 top', 60, 'adet', 'adet')]],
+    ['Bademli / fındıklı çikolata', 50, [P('1 kare', 6, 'adet', 'kare'), P('1 küçük paket (4 kare)', 25, 'boyut', 'paket')], 'fatty'],
+    ['Beyaz çikolata', 58, [P('1 kare', 5, 'adet', 'kare'), P('4 kare', 20, 'adet', 'kare')], 'fatty'],
+    ['Dondurulmuş dondurma (kutu, sade)', 24, [P('1 top', 50, 'adet', 'adet'), P('1 küçük kase (3 top)', 150, 'olcu', 'kase')], 'fatty'],
+    ['Gazoz / meyveli şeker (lokum)', 85, [P('1 küçük parça', 6, 'adet', 'adet'), P('3 parça', 18, 'adet', 'adet')], 'fast'],
+    ['Cevizli sucuk', 55, [P('1 dilim', 20, 'boyut', 'dilim'), P('3 dilim', 60, 'adet', 'dilim')], 'fatty'],
+    ['Çikolatalı gofret (büyük)', 60, [P('1 büyük bar', 50, 'boyut', 'adet')], 'fatty'],
+    ['Karamelli / şekerli çubuk (lollipop)', 95, [P('1 adet', 8, 'adet', 'adet')], 'fast'],
+    ['Ballı / reçelli kraker', 68, [P('1 adet', 8, 'adet', 'adet'), P('3 adet', 24, 'adet', 'adet')]],
+    ['Tuzlu çubuk / çubuk kraker', 70, [P('1 küçük paket', 20, 'boyut', 'paket'), P('1 büyük paket', 40, 'boyut', 'paket')]],
+    ['Patlamış mısır (yağlı / karışık)', 55, [P('1 küçük kase', 30, 'boyut', 'kase'), P('1 büyük kase', 60, 'boyut', 'kase')], 'fatty'],
+    ['Kuru pasta / kurabiye (çeşitli)', 55, [P('1 adet', 12, 'adet', 'adet'), P('3 adet', 36, 'adet', 'adet')], 'fatty'],
   ],
   'Sebzeler': [
     ['Havuç', 7, [P('1 küçük boy', 50, 'boyut', 'adet'), P('1 orta boy', 80, 'boyut', 'adet'), P('1 büyük boy', 120, 'boyut', 'adet'), P('1 kase rendelenmiş', 100, 'olcu', 'kase')]],
@@ -322,6 +543,29 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Brokoli / karnabahar', 3, [P('1 kase haşlanmış', 100, 'olcu', 'kase'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
     ['Kabak', 3, [P('1 orta boy', 150, 'boyut', 'adet'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
     ['Patlıcan', 3, [P('1 orta boy', 150, 'boyut', 'adet'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Biber (yeşil / kırmızı dolmalık)', 5, [P('1 adet', 60, 'adet', 'adet'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Sivri biber', 5, [P('3 adet', 50, 'adet', 'adet'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Mantar', 3, [P('1 küçük kase', 100, 'olcu', 'kase'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Pırasa', 8, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Ispanak', 4, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon'), P('1 küçük kase', 100, 'olcu', 'kase')]],
+    ['Kereviz', 6, [P('1/2 adet', 100, 'porsiyon', 'yarım'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Marul / göbek salata', 2, [P('1 büyük yaprak', 20, 'adet', 'adet'), P('1 kase doğranmış', 100, 'olcu', 'kase')]],
+    ['Roka / maydanoz / nane', 3, [P('1 avuç', 30, 'boyut', 'avuç'), P('1 demet (küçük)', 60, 'porsiyon', 'adet')]],
+    ['Bamya (taze)', 7, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Enginar (taze kalp)', 6, [P('1 adet', 150, 'adet', 'adet')]],
+    ['Semizotu', 3, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Soğan', 9, [P('1 orta boy', 120, 'boyut', 'adet'), P('1/2 orta boy', 60, 'porsiyon', 'yarım')]],
+    ['Sarımsak', 28, [P('1 diş', 4, 'adet', 'adet'), P('3 diş', 12, 'adet', 'adet')]],
+    ['Lahana (beyaz / kara)', 6, [P('1 kase doğranmış', 100, 'olcu', 'kase'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Turp (kırmızı / beyaz)', 4, [P('1 adet küçük', 50, 'adet', 'adet'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Mısır (taze taneli)', 19, [P('3 yemek kaşığı', 50, 'olcu', 'kaşık'), P('1 küçük kase', 100, 'olcu', 'kase')]],
+    ['Tatlı patates (fırın)', 27, [P('1 küçük boy', 150, 'boyut', 'adet'), P('1 orta boy', 200, 'boyut', 'adet')]],
+    ['Fasulye (taze)', 7, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Börülce', 9, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Domates kurusu (güneşte)', 55, [P('2 adet', 10, 'adet', 'adet'), P('1 porsiyon', 25, 'porsiyon', 'adet')]],
+    ['Salatalık turşusu', 3, [P('2 adet', 40, 'adet', 'adet'), P('1 porsiyon', 100, 'porsiyon', 'porsiyon')]],
+    ['Cevizli / yapraklı yeşillik salata (yemeklik)', 3, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
+    ['Sarımsaklı yoğurtlu sebze (havuçlu)', 6, [P('1 porsiyon', 150, 'porsiyon', 'porsiyon')]],
   ],
   'Hipo İçin': [
     ['Glukoz tableti (etiketi kontrol et)', 90, [P('1 tablet', 4, 'adet', 'tablet'), P('3 tablet', 12, 'adet', 'tablet'), P('4 tablet', 16, 'adet', 'tablet')], 'fast'],
@@ -329,6 +573,11 @@ const DATA: Record<(typeof CATEGORIES)[number], Row[]> = {
     ['Toz şeker', 100, [P('1 çay kaşığı', 3, 'olcu', 'kaşık'), P('1 tatlı kaşığı', 5, 'olcu', 'kaşık'), P('1 yemek kaşığı', 12, 'olcu', 'kaşık')], 'fast'],
     ['Meyve suyu (hipo için)', 11, [P('1 çay bardağı (100 ml)', 100, 'olcu', 'bardak'), P('150 ml (ideal hipo dozu)', 150, 'olcu', 'kutu'), P('1 küçük kutu (200 ml)', 200, 'adet', 'kutu')], 'fast'],
     ['Bal (hipo için)', 82, [P('1 tatlı kaşığı', 10, 'olcu', 'kaşık'), P('1 yemek kaşığı', 20, 'olcu', 'kaşık')], 'fast'],
+    ['Glukoz jeli / hipo jeli', 30, [P('1 poşet (15 g KHO)', 50, 'adet', 'poşet'), P('1 poşet (20 g KHO)', 65, 'adet', 'poşet')], 'fast'],
+    ['Dekstroz tablet', 95, [P('1 tablet', 3, 'adet', 'tablet'), P('4 tablet', 12, 'adet', 'tablet')], 'fast'],
+    ['Hipo şekeri: meyve suyu (200 ml)', 11, [P('1 küçük kutu (200 ml)', 200, 'adet', 'kutu')], 'fast'],
+    ['Nişastalı / pekmezli hipo tozu', 85, [P('1 çay kaşığı', 4, 'olcu', 'kaşık'), P('1 tatlı kaşığı', 8, 'olcu', 'kaşık')], 'fast'],
+    ['Hipolu unlu sütlü içecek (ev yapımı)', 12, [P('1 bardak (200 ml)', 200, 'olcu', 'bardak')], 'fast'],
   ],
 };
 
@@ -376,6 +625,15 @@ const EXCHANGE: Record<string, number> = {
   'Hamburger': x(37.5, 220), // ~2,5 ekmek (35–40 g)
   'Tavuk döner dürüm': x(45, 300), // 3 ekmek
   'Döner ekmek arası': x(60, 300), // yarım ekmek: 4 ekmek
+  'Ciğer (dana, pişmiş)': x(10, 150), // 1 porsiyon = 1 yağlı tohum + 10 g KHO
+  'Ciğer (kuzu, pişmiş)': x(10, 150),
+  'Arnavut ciğeri (kızarmış)': x(12, 150),
+  'Edirne tava ciğeri': x(15, 150),
+  'Ciğer şis / ciğer kavurma': x(10, 150),
+  'Tavuk ciğeri (sote)': x(10, 150),
+  'Karaciğer yapraklı dürüm / ciğer dürüm': x(60, 250), // 1 dürüm + 1 ekmek
+  'Kokoreç (porsiyon, ekmeksiz)': x(10, 150),
+  'Kokoreç (yarım ekmek)': x(75, 300), // yarım ekmek + 1 yağlı tohum
   'Pizza': x(30, 110), // 1 dilim = 2 ekmek
   'Poğaça (peynirli)': x(30, 70), // 2 ekmek
   'Kaşarlı tost': x(37.5, 150), // 2,5 ekmek
@@ -388,6 +646,44 @@ const EXCHANGE: Record<string, number> = {
   'Zeytinyağlı yaprak sarma': x(15, 80), // 4 adet = 1 ekmek
   'Karnıyarık': x(6, 250), 'Menemen': x(12, 200), 'İçli köfte': x(22.5, 70), 'Humus': x(7.5, 40),
 };
+
+/** Yeni eklenen ekmek / tahıl kayıtları: TÜBER değişim listesinde 1 ekmek değişimi = 15 g KHO */
+const NEW_STARCH_EXCHANGE: Record<string, number> = {
+  'Çok tahıllı / tahıllı ekmek': x(15, 25), 'Mısır ekmeği': x(15, 25), 'Roll / sandviç ekmeği': x(15, 30),
+  'Burger ekmeği (susamlı)': x(15, 25), 'Tam buğday lavaş / dürüm': x(15, 30), 'Pide (sade, Ramazan dışı)': x(15, 25),
+  'Krep / pankek (sade)': x(15, 50), 'Peynirli / ıspanaklı börek (tepsi)': x(15, 50), 'Kıymalı börek': x(15, 55),
+  'Çörek': x(15, 30), 'Katmer': x(15, 35), 'Gözleme (ıspanaklı / patatesli)': x(15, 55), 'Etimek (peksimet)': x(15, 20),
+  'Diyet bisküvi (yulaflı / tahıllı)': x(15, 25), 'Nişasta (buğday / mısır)': x(15, 17), 'Galeta unu (ekmek kırıntısı)': x(15, 20),
+  'Yulaf kepeği': x(15, 20),
+  'Bulgur (kuru)': x(15, 22), 'Pirinç (kuru)': x(15, 20), 'Makarna (kuru / pişmemiş)': x(15, 20), 'Kinoa (haşlanmış)': x(15, 75),
+  'Nohut (haşlanmış)': x(15, 55), 'Kuru fasulye (haşlanmış)': x(15, 65), 'Mercimek (haşlanmış)': x(15, 75),
+  'Barbunya (kuru / pişmemiş)': x(15, 25), 'Karabuğday (haşlanmış)': x(15, 75), 'İnce bulgur (haşlanmış)': x(15, 80),
+  'Pirinç keki (patlak pirinç)': x(15, 18),
+  // Meyve grubu: 1 değişim = 15 g KHO
+  'Kayısı (kuru, gün kurusu)': x(15, 25), 'Trabzon hurması (cennet hurması)': x(15, 90), 'Mango': x(15, 100),
+  'Kivi (altın)': x(15, 100), 'Frenk üzümü / kuş üzümü': x(15, 125), 'Böğürtlen': x(15, 150), 'Ahududu': x(15, 150),
+  'Yaban mersini': x(15, 125), 'Mor elma': x(15, 100), 'Kayısı (konserve, hafif şuruplu)': x(15, 120), 'Şeftali (konserve)': x(15, 120),
+  'Erik (kuru)': x(15, 25),
+  // Sebze grubu: 1 değişim = 6 g KHO
+  'Biber (yeşil / kırmızı dolmalık)': x(6, 120), 'Sivri biber': x(6, 120), 'Mantar': x(6, 150), 'Pırasa': x(6, 100),
+  'Ispanak': x(6, 150), 'Kereviz': x(6, 100), 'Bamya (taze)': x(6, 100), 'Enginar (taze kalp)': x(6, 100), 'Semizotu': x(6, 200),
+  'Fasulye (taze)': x(6, 100), 'Lahana (beyaz / kara)': x(6, 150), 'Börülce': x(6, 100), 'Tatlı patates (fırın)': x(15, 60),
+  // Hazır yemekler (porsiyonun ilk ölçüsüne göre)
+  'Etli nohut': x(22.5, 200), 'Etli kuru fasulye': x(22.5, 200), 'Tas kebabı': x(0, 200), 'Saç kavurma': x(0, 150),
+  'Sulu köfte': x(15, 250), 'Kuru köfte (ekonomik köfte)': x(22.5, 120), 'İzmir köfte': x(15, 250), 'Falafel dürüm / porsiyon': x(45, 250),
+  'Karnabahar kızartması': x(15, 125), 'Kabak mücver': x(15, 120), 'Patlıcan musakka (beşamel)': x(22.5, 250),
+  'Fasulye pilaki': x(30, 200), 'Hamsi tava (unlanmış)': x(15, 150), 'Sezar salata': x(6, 250), 'Muhammara': x(7.5, 70),
+  'Mercimekli meze (kısıra benzer, domates-biberli)': x(15, 100), 'Mütebbel (patlıcanlı)': x(10, 100),
+  'Antep fıstıklı baklava (burma)': x(27.5, 55), 'Sütlü nuriye / fıstıklı sarma': x(22.5, 45),
+  'Kalburabastı': x(22.5, 45), 'Bülbül yuvası': x(22.5, 50), 'Brownie': x(22.5, 50), 'Muffin': x(20, 50),
+  'Tuzlu çubuk / çubuk kraker': x(15, 20),
+  // İçecekler
+  'Elma suyu': x(15, 100), 'Portakal / mandalina nektarı': x(15, 100), 'Meyve suyu (100%, şekersiz)': x(15, 100),
+  'Greyfurt suyu (taze)': x(15, 150), 'Enerji içeceği (şekerli)': x(30, 250), 'Oral rehidrasyon / izotonik içecek': x(15, 250),
+  'Şekerli çay / kahve (bir küp şeker)': x(3, 100),
+};
+
+const EXCHANGE_ALL: Record<string, number> = { ...EXCHANGE, ...NEW_STARCH_EXCHANGE };
 
 const BOWL: Portion[] = [{ label: '1 küçük kase (150 ml)', grams: 150 }, { label: '1 kase (250 ml)', grams: 250 }];
 
@@ -507,6 +803,259 @@ const HOSPITAL_PORTIONS: Record<string, Portion[]> = {
   'Simit': [{ label: '1 adet (100 g)', grams: 100 }, { label: '1/2 adet', grams: 50 }, { label: '1/4 adet', grams: 25 }],
 };
 
+/**
+ * Türk ev yemekleri için tarif hesabı.
+ * Karbonhidrat, malzeme gramından hesaplanır: Σ(malzeme g × 100 g KHO) ÷ pişmiş toplam ağırlık.
+ * Bu bir ölçüm değil, standart tarif varsayımıdır; tencerenin suyu ve yağı sonucu değiştirir.
+ * Hazır/alışveriş yemeklerinde porsiyon daha ağır olur, o yüzden büyük porsiyon da tanımlı.
+ */
+const ING: Record<string, number> = {
+  pirinç: 78, bulgur: 68, un: 76, makarna: 73, irmik: 73, 'mısır unu': 76, yufka: 58,
+  kıyma: 0, kuzu: 0, tavuk: 0, balık: 0, yumurta: 1, kaşar: 1, yoğurt: 4.5, süt: 4.8, yağ: 0,
+  soğan: 9, salça: 15, domates: 4, biber: 5, patlıcan: 3, kabak: 3, patates: 17, havuç: 7,
+  lahana: 6, 'asma yaprağı': 11, limon: 6, nohut: 58, mercimek: 55, barbunya: 60, bakla: 7, bamya: 7,
+  şeker: 100, pekmez: 75, ceviz: 7, dut: 10, ayva: 13, 'hindistan cevizi': 24,
+};
+
+type Recipe = {
+  name: string;
+  category: string;
+  /** Pişmiş toplam ağırlık (g). Karbonhidrat bu ağırlığa bölünür. */
+  yield: number;
+  items: [string, number][];
+  portions: Portion[];
+  flag?: 'fatty' | 'fast';
+};
+
+const RECIPES: Recipe[] = [
+  // Çorbalar
+  {
+    name: 'Düğün çorbası', category: 'Çorbalar', yield: 1200,
+    items: [['un', 40], ['yoğurt', 200], ['yumurta', 50], ['kıyma', 100], ['soğan', 40], ['salça', 15], ['yağ', 20]],
+    portions: [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 standart kase (200 ml)', 200, 'olcu', 'kase'), P('1 büyük kase (250 ml)', 250, 'porsiyon', 'kase')],
+  },
+  {
+    name: 'Yeşil mercimek çorbası', category: 'Çorbalar', yield: 1200,
+    items: [['mercimek', 120], ['soğan', 60], ['havuç', 50], ['patates', 80], ['salça', 20], ['un', 20], ['yağ', 20]],
+    portions: [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 standart kase (200 ml)', 200, 'olcu', 'kase'), P('1 büyük kase (250 ml)', 250, 'porsiyon', 'kase')],
+  },
+  {
+    name: 'Erişteli yeşil mercimek çorbası', category: 'Çorbalar', yield: 1300,
+    items: [['mercimek', 120], ['makarna', 80], ['soğan', 60], ['salça', 20], ['yağ', 20]],
+    portions: [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 standart kase (200 ml)', 200, 'olcu', 'kase'), P('1 büyük kase (250 ml)', 250, 'porsiyon', 'kase')],
+  },
+  {
+    name: 'Balık çorbası', category: 'Çorbalar', yield: 1200,
+    items: [['balık', 400], ['patates', 150], ['havuç', 60], ['soğan', 60], ['un', 20], ['yağ', 20]],
+    portions: [P('1 kepçe', 75, 'olcu', 'kepçe'), P('1 standart kase (200 ml)', 200, 'olcu', 'kase')],
+  },
+  // Ana yemekler
+  {
+    name: 'Kuru dolma (etli)', category: 'Ana Yemekler', yield: 900,
+    items: [['biber', 350], ['patlıcan', 200], ['pirinç', 70], ['kıyma', 150], ['soğan', 60], ['salça', 25], ['yağ', 30]],
+    portions: [P('1 adet', 80, 'adet', 'adet'), P('2 adet', 160, 'adet', 'adet'), P('1 porsiyon (3-4 adet)', 300, 'porsiyon', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Kabak dolması (etli)', category: 'Ana Yemekler', yield: 800,
+    items: [['kabak', 450], ['pirinç', 60], ['kıyma', 120], ['soğan', 50], ['salça', 20], ['yağ', 20]],
+    portions: [P('1 adet', 100, 'adet', 'adet'), P('2 adet', 200, 'adet', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Lahana sarması (etli)', category: 'Ana Yemekler', yield: 900,
+    items: [['lahana', 400], ['pirinç', 80], ['kıyma', 150], ['soğan', 50], ['salça', 25], ['yağ', 25]],
+    portions: [P('1 adet', 35, 'adet', 'adet'), P('4 adet', 140, 'adet', 'adet'), P('1 porsiyon (6-7 adet)', 220, 'porsiyon', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Etli yaprak sarma', category: 'Ana Yemekler', yield: 700,
+    items: [['asma yaprağı', 200], ['pirinç', 80], ['kıyma', 150], ['soğan', 50], ['salça', 20], ['yağ', 30]],
+    portions: [P('1 adet', 18, 'adet', 'adet'), P('4 adet', 72, 'adet', 'adet'), P('1 porsiyon (8 adet)', 145, 'porsiyon', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Ekşili köfte', category: 'Ana Yemekler', yield: 1100,
+    items: [['kıyma', 200], ['bulgur', 80], ['un', 30], ['yumurta', 50], ['soğan', 50], ['salça', 25], ['patates', 100], ['limon', 20], ['yağ', 20]],
+    portions: [P('1 kepçe', 150, 'olcu', 'kepçe'), P('1 porsiyon', 350, 'porsiyon', 'porsiyon')],
+  },
+  {
+    name: 'Ali nazik', category: 'Ana Yemekler', yield: 700,
+    items: [['patlıcan', 400], ['yoğurt', 200], ['kuzu', 200], ['yağ', 20]],
+    portions: [P('1 porsiyon', 300, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Çökertme kebabı', category: 'Ana Yemekler', yield: 800,
+    items: [['patates', 300], ['kuzu', 200], ['yoğurt', 150], ['domates', 100], ['yağ', 40]],
+    portions: [P('1 porsiyon', 350, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Güveç (etli sebze)', category: 'Ana Yemekler', yield: 900,
+    items: [['kuzu', 250], ['patlıcan', 200], ['biber', 100], ['domates', 150], ['soğan', 60], ['yağ', 30]],
+    portions: [P('1 porsiyon', 300, 'porsiyon', 'porsiyon')],
+  },
+  {
+    name: 'Kuzu haşlama', category: 'Ana Yemekler', yield: 800,
+    items: [['kuzu', 350], ['patates', 200], ['havuç', 80], ['soğan', 60]],
+    portions: [P('1 porsiyon', 300, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Fırında makarna', category: 'Ana Yemekler', yield: 1400,
+    items: [['makarna', 250], ['kıyma', 250], ['süt', 300], ['un', 40], ['yağ', 40], ['kaşar', 80], ['salça', 30]],
+    portions: [P('1 küçük dilim', 150, 'boyut', 'dilim'), P('1 standart dilim', 250, 'porsiyon', 'dilim'), P('1 büyük dilim', 350, 'boyut', 'dilim')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Kıymalı makarna', category: 'Ana Yemekler', yield: 900,
+    items: [['makarna', 250], ['kıyma', 150], ['soğan', 60], ['salça', 30], ['yağ', 25]],
+    portions: [P('1 küçük porsiyon', 200, 'boyut', 'porsiyon'), P('1 porsiyon', 300, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Şakşuka', category: 'Ana Yemekler', yield: 700,
+    items: [['patlıcan', 300], ['patates', 150], ['biber', 100], ['domates', 150], ['soğan', 40], ['yağ', 50]],
+    portions: [P('1 yemek kaşığı', 30, 'olcu', 'kaşık'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Zeytinyağlı bakla', category: 'Ana Yemekler', yield: 800,
+    items: [['bakla', 400], ['soğan', 80], ['un', 15], ['limon', 15], ['yağ', 30]],
+    portions: [P('1 porsiyon', 250, 'porsiyon', 'porsiyon')],
+  },
+  {
+    name: 'Etli bamya', category: 'Ana Yemekler', yield: 800,
+    items: [['bamya', 350], ['kıyma', 150], ['soğan', 60], ['salça', 25], ['yağ', 20]],
+    portions: [P('1 porsiyon', 250, 'porsiyon', 'porsiyon')],
+  },
+  // Kahvaltı
+  {
+    name: 'Mıhlama (kuymak)', category: 'Kahvaltılık', yield: 500,
+    items: [['mısır unu', 120], ['kaşar', 150], ['yağ', 50]],
+    portions: [P('1 yemek kaşığı', 30, 'olcu', 'kaşık'), P('1 küçük porsiyon', 120, 'boyut', 'porsiyon'), P('1 porsiyon', 200, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Çılbır', category: 'Kahvaltılık', yield: 300,
+    items: [['yoğurt', 200], ['yumurta', 100], ['yağ', 15]],
+    portions: [P('1 porsiyon (2 yumurta)', 250, 'porsiyon', 'porsiyon')],
+  },
+  {
+    name: 'Pişi', category: 'Kahvaltılık', yield: 600,
+    items: [['un', 350], ['yoğurt', 100], ['yumurta', 50], ['şeker', 10], ['yağ', 60]],
+    portions: [P('1 küçük adet', 40, 'boyut', 'adet'), P('1 standart adet', 60, 'boyut', 'adet'), P('2 adet', 120, 'adet', 'adet')],
+    flag: 'fatty',
+  },
+  // Fast food
+  {
+    name: 'Çiğ börek', category: 'Fast Food & Sokak', yield: 600,
+    items: [['un', 250], ['kıyma', 200], ['soğan', 50], ['yağ', 50]],
+    portions: [P('1 küçük adet', 80, 'boyut', 'adet'), P('1 standart adet', 110, 'boyut', 'adet'), P('2 adet', 220, 'adet', 'adet')],
+    flag: 'fatty',
+  },
+  // Tatlılar
+  {
+    name: 'Kabak tatlısı', category: 'Tatlılar & Atıştırmalık', yield: 800,
+    items: [['kabak', 600], ['şeker', 200], ['ceviz', 30]],
+    portions: [P('1 dilim', 80, 'boyut', 'dilim'), P('1 porsiyon', 150, 'porsiyon', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Ayva tatlısı', category: 'Tatlılar & Atıştırmalık', yield: 700,
+    items: [['ayva', 500], ['şeker', 180], ['ceviz', 20]],
+    portions: [P('1/2 adet', 120, 'porsiyon', 'yarım'), P('1 tam adet', 240, 'boyut', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Un helvası', category: 'Tatlılar & Atıştırmalık', yield: 500,
+    items: [['un', 200], ['yağ', 120], ['şeker', 150], ['süt', 100]],
+    portions: [P('1 yemek kaşığı', 25, 'olcu', 'kaşık'), P('1 küçük porsiyon', 60, 'boyut', 'porsiyon')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Sütlü irmik tatlısı', category: 'Tatlılar & Atıştırmalık', yield: 900,
+    items: [['irmik', 120], ['süt', 600], ['şeker', 150]],
+    portions: [P('1 küçük kase', 150, 'boyut', 'kase'), P('1 kase', 220, 'olcu', 'kase')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Kemalpaşa tatlısı', category: 'Tatlılar & Atıştırmalık', yield: 800,
+    items: [['un', 150], ['yumurta', 100], ['süt', 100], ['şeker', 200]],
+    portions: [P('1 adet', 60, 'adet', 'adet'), P('2 adet', 120, 'adet', 'adet')],
+    flag: 'fatty',
+  },
+  {
+    name: 'Cezerye', category: 'Tatlılar & Atıştırmalık', yield: 400,
+    items: [['havuç', 300], ['şeker', 120], ['ceviz', 40], ['hindistan cevizi', 20]],
+    portions: [P('1 dilim (parmak)', 25, 'boyut', 'dilim'), P('2 dilim', 50, 'adet', 'dilim')],
+    flag: 'fatty',
+  },
+];
+
+/**
+ * Markalı paketli ürünler.
+ * Değerler ürün etiketinden; derleme kaynağı Open Food Facts (ODbL lisanslı, gönüllü katkı).
+ * Barkod, kaydı doğrulamak içindir: markette barkodu okutup Open Food Facts'te ürünü bulabilirsin.
+ * Etiket değişirse buradaki değer eskir; şüphedeysen paketin üstündeki "Karbonhidrat" satırını esas al.
+ */
+type BrandRow = [name: string, carbsPer100: number, barcode: string, portions: Portion[], flags?: 'fatty' | 'fast'];
+
+const BRANDS: Record<string, BrandRow[]> = {
+  'Tatlılar & Atıştırmalık': [
+    ['Ülker Bitter Çikolata (tablet)', 41, '8690766157777', [P('1 tablet', 70, 'porsiyon', 'adet')], 'fatty'],
+    ['Kahve Dünyası Tambol Sütlü Çikolata', 51, '8699270023585', [P('1 paket', 77, 'porsiyon', 'adet')], 'fatty'],
+    ['Ülker Çikolatalı Gofret', 58, '8690504020509', [P('1 adet', 39, 'adet', 'adet')], 'fatty'],
+    ['Ülker Çikolatalı Gofret Maxi', 53, '8690504136514', [P('1 adet', 47, 'adet', 'adet')], 'fatty'],
+    ['Ülker Dido Sütlü Çikolatalı Gofret', 57, '8690504028536', [P('1 adet', 35, 'adet', 'adet')], 'fatty'],
+    ['Ülker 9 Kat Tat Portakallı Gofret', 63, '8690504086093', [P('1 adet', 39, 'adet', 'adet')], 'fatty'],
+    ['Eti Gold Çikolatalı Gofret', 63, '8690526019222', [P('1 adet', 29, 'adet', 'adet')], 'fatty'],
+    ['Eti Tutku Bisküvi', 61, '8690526083254', [P('1 küçük paket', 30, 'boyut', 'paket'), P('1 paket', 100, 'porsiyon', 'paket')], 'fatty'],
+    ['Ülker Probis Proteinli Bisküvi', 56, '8690504961482', [P('1 paket', 75, 'porsiyon', 'paket')], 'fatty'],
+    ['Ülker Altınbaşak Çörekotlu Kinoalı Bisküvi', 64, '8690504011828', [P('1 paket', 40, 'porsiyon', 'paket')], 'fatty'],
+    ["Lay's Yoğurt ve Mevsim Yeşillikli Cips", 52, '8690624104639', [P('1 küçük paket', 40, 'boyut', 'paket'), P('1 paket', 107, 'porsiyon', 'paket')], 'fatty'],
+    ["Lay's Baharatlı Cips", 52, '8690624105766', [P('1 küçük paket', 40, 'boyut', 'paket'), P('1 paket', 125, 'porsiyon', 'paket')], 'fatty'],
+    ['Ruffles Sade Patates Cipsi', 51, '8690624105742', [P('1 küçük paket', 40, 'boyut', 'paket'), P('1 paket', 125, 'porsiyon', 'paket')], 'fatty'],
+    ['Samba Tırtıklı Sade Patates Cipsi', 52, '8699118033516', [P('1 paket', 150, 'porsiyon', 'paket')], 'fatty'],
+    ['Pukka Glütensiz Sade Patates Cipsi', 48, '8683880758012', [P('1 paket', 70, 'porsiyon', 'paket')], 'fatty'],
+    ['Pukka Yoğurt ve Mevsim Yeşillikli Cips', 52, '8683880758043', [P('1 paket', 70, 'porsiyon', 'paket')], 'fatty'],
+    ['Ülker Çizi Peynirli Kraker', 61, '8690766009205', [P('1 küçük paket', 35, 'boyut', 'paket'), P('1 paket', 70, 'porsiyon', 'paket')]],
+    ['Eti Crax Sade Çubuk Kraker', 73, '8690533034010', [P('1 paket', 40, 'porsiyon', 'paket')]],
+    ['Eti Crax Acı Baharatlı Çubuk Kraker', 68, '8690526044873', [P('1 paket', 50, 'porsiyon', 'paket')]],
+    ['Eti Form Zeytinli Kinoalı Çubuk Kraker', 64, '8690533094519', [P('1 paket', 50, 'porsiyon', 'paket')]],
+    ['Ülker Susamlı Çörek Otlu Kraker', 59, '8690504188209', [P('1 paket', 44, 'porsiyon', 'paket')]],
+    ['Eti Popkek Vişneli', 56, '8690526073873', [P('1 adet', 60, 'adet', 'adet')], 'fatty'],
+    ['Eti Popkek Çikolatalı', 57, '8690526083711', [P('1 adet', 60, 'adet', 'adet')], 'fatty'],
+    ['Eti Popkek Muzlu', 57, '8690526083728', [P('1 adet', 60, 'adet', 'adet')], 'fatty'],
+    ['Eti Browni Gold', 52, '8690526053738', [P('1 adet', 45, 'adet', 'adet')], 'fatty'],
+    ['Eti Browni Antep Fıstıklı', 46, '8690526954127', [P('1 adet', 35, 'adet', 'adet')], 'fatty'],
+    ['Ülker Pöti Kek', 52, '8690504079767', [P('1 adet', 35, 'adet', 'adet')], 'fatty'],
+    ['Ülker K Ekstra Konfeti Kek', 57, '8690504077411', [P('1 adet', 38, 'adet', 'adet')], 'fatty'],
+    ['Algida Maraş Usulü Sade Dondurma', 23, '8683130040492', [P('1 top', 50, 'adet', 'adet'), P('1 kase (3 top)', 150, 'olcu', 'kase')], 'fatty'],
+    ['Magnum Cookie Dondurma', 32, '8690637936036', [P('1 adet', 95, 'adet', 'adet')], 'fatty'],
+    ['Algida Twister Forest', 20, '8690637943447', [P('1 adet', 70, 'adet', 'adet')], 'fatty'],
+    ['Eti Alaska Frigo Bitter Çikolata Kaplı', 32, '8690526099613', [P('1 adet', 60, 'adet', 'adet')], 'fatty'],
+    ['Bugido Dudi Kornet Dondurma', 26, '8695077001078', [P('1 adet', 70, 'adet', 'adet')], 'fatty'],
+    ['Algida Klasik Vanilyalı Dondurma', 26, '8690637846908', [P('1 adet', 65, 'adet', 'adet')], 'fatty'],
+  ],
+  'Süt & İçecekler': [
+    ['Cappy Karışık Meyve Suyu', 10, '5449000046048', [P('1 kutu (330 ml)', 330, 'adet', 'kutu')], 'fast'],
+    ['Uludağ Meyvelim Greyfurt Suyu', 11, '1500144801604', [P('1 bardak (200 ml)', 200, 'olcu', 'bardak'), P('1 şişe (1 L)', 1000, 'adet', 'şişe')], 'fast'],
+    ['Harras Organik %100 Kırmızı Meyve Suyu', 11, '8695077141552', [P('1 bardak (200 ml)', 200, 'olcu', 'bardak'), P('1 şişe (700 ml)', 700, 'adet', 'şişe')], 'fast'],
+    ['Sütaş Ayran', 2, '8690767714450', [P('1 kutu (175 ml)', 175, 'adet', 'kutu'), P('1 bardak (200 ml)', 200, 'olcu', 'bardak')]],
+  ],
+};
+
+/** Tariften 100 g başına karbonhidrat */
+function recipeCarbs(r: Recipe): number {
+  const total = r.items.reduce((sum, [key, grams]) => {
+    const base = ING[key] ?? ING[key.toLocaleLowerCase('tr-TR')] ?? 0;
+    return sum + (base * grams) / 100;
+  }, 0);
+  return Math.round((total / r.yield) * 100 * 10) / 10;
+}
+
 function inferPortionCategory(label: string): PortionCategory {
   const l = label.toLowerCase();
   if (l.includes('boy') || l.includes('dilim') || l.includes('kalın') || l.includes('ince')) return 'boyut';
@@ -541,19 +1090,44 @@ const MEAT = new Set(['Izgara köfte', 'Izgara et / tavuk / balık', 'Tavuk sote
 /** Yumurta ve saf et gerçek bileşimde de 0 g karbonhidrattır (TürKomp 0,00 g) */
 const ZERO_BASE = new Set(['Haşlanmış yumurta', 'Omlet', 'Izgara et / tavuk / balık']);
 
-export const FOODS: Food[] = Object.entries(DATA).flatMap(([category, rows]) =>
-  rows.map(([name, carbsPer100, portions, flag]) => ({
-    id: slug(`${category}-${name}`),
-    name,
-    category,
-    carbsPer100: ZERO_BASE.has(name) ? 0 : carbsPer100,
-    exPer100: HOSPITAL[name] ?? EXCHANGE[name],
-    meat: MEAT.has(name) || undefined,
-    portions: mergePortions(HOSPITAL_PORTIONS[name] ?? PORTIONS[name] ?? portions, portions),
-    fatty: flag === 'fatty' || undefined,
-    fast: flag === 'fast' || undefined,
+export const FOODS: Food[] = [
+  ...Object.entries(DATA).flatMap(([category, rows]) =>
+    rows.map(([name, carbsPer100, portions, flag]) => ({
+      id: slug(`${category}-${name}`),
+      name,
+      category,
+      carbsPer100: ZERO_BASE.has(name) ? 0 : carbsPer100,
+      exPer100: HOSPITAL[name] ?? EXCHANGE_ALL[name],
+      meat: MEAT.has(name) || undefined,
+      portions: mergePortions(HOSPITAL_PORTIONS[name] ?? PORTIONS[name] ?? portions, portions),
+      fatty: flag === 'fatty' || undefined,
+      fast: flag === 'fast' || undefined,
+    })),
+  ),
+  ...RECIPES.map((r) => ({
+    id: slug(`${r.category}-${r.name}`),
+    name: r.name,
+    category: r.category,
+    carbsPer100: recipeCarbs(r),
+    // Bu yemekler için hastane değişim listesi kuralı yok; iki yöntem de tarif değerini kullanır.
+    portions: mergePortions(r.portions),
+    fatty: r.flag === 'fatty' || undefined,
+    fast: r.flag === 'fast' || undefined,
   })),
-);
+  ...Object.entries(BRANDS).flatMap(([category, rows]) =>
+    rows.map(([name, carbsPer100, barcode, portions, flag]) => ({
+      id: slug(`${category}-${name}`),
+      name,
+      category,
+      carbsPer100,
+      // Etiketteki 100 g değeri esas; değişim yöntemi için ayrı kural yok.
+      portions: mergePortions(portions),
+      barcode,
+      fatty: flag === 'fatty' || undefined,
+      fast: flag === 'fast' || undefined,
+    })),
+  ),
+];
 
 /** Türkçe karakter ve büyük/küçük harf duyarsız arama için */
 export function normalize(s: string) {

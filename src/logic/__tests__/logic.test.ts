@@ -286,20 +286,20 @@ describe('ratios', () => {
   };
 
   it('no suggestion with fewer than 3 samples', () => {
-    const s = analyzeIcr([...meal(1, 110), ...meal(2, 110)], blocks, profile);
+    const s = analyzeIcr([...meal(1, 110), ...meal(2, 110)], blocks, profile, new Date(2026, 8, 5).getTime());
     expect(s[0].samples).toHaveLength(2);
     expect(s[0].suggested).toBeUndefined();
   });
 
   it('keeps ratio when post-meal returns to target', () => {
-    const s = analyzeIcr([...meal(1, 110), ...meal(2, 110), ...meal(3, 110)], blocks, profile);
+    const s = analyzeIcr([...meal(1, 110), ...meal(2, 110), ...meal(3, 110)], blocks, profile, new Date(2026, 8, 5).getTime());
     expect(s[0].observed).toBeCloseTo(10);
     expect(s[0].suggested).toBe(10);
   });
 
   it('suggests stronger ratio when consistently high, capped at 20%', () => {
     // post 190 → needed +2 U → 60 g / 8 U = 7.5 g/U, capped to 8
-    const s = analyzeIcr([...meal(1, 190), ...meal(2, 190), ...meal(3, 190)], blocks, profile);
+    const s = analyzeIcr([...meal(1, 190), ...meal(2, 190), ...meal(3, 190)], blocks, profile, new Date(2026, 8, 5).getTime());
     expect(s[0].observed).toBeCloseTo(7.5);
     expect(s[0].suggested).toBe(8);
   });
@@ -313,7 +313,7 @@ describe('ratios', () => {
       ...meal(3, 190, { bg: 200 }),
       { id: 'y', time: t, bg: 110, carbs: 60, bolus: 6 },
     ];
-    expect(analyzeIcr(log, blocks, profile)[0].samples).toHaveLength(0);
+    expect(analyzeIcr(log, blocks, profile, new Date(2026, 8, 5).getTime())[0].samples).toHaveLength(0);
   });
 
   it('ISF from correction-only doses', () => {
@@ -324,10 +324,10 @@ describe('ratios', () => {
         { id: `q${day}`, time: t + 5 * 3600000, bg: post },
       ];
     };
-    const s = analyzeIsf([...corr(1, 110), ...corr(2, 110), ...corr(3, 110)], blocks, profile);
+    const s = analyzeIsf([...corr(1, 110), ...corr(2, 110), ...corr(3, 110)], blocks, profile, new Date(2026, 8, 5).getTime());
     expect(s[0].observed).toBeCloseTo(40);
     expect(s[0].suggested).toBe(40);
-    const weak = analyzeIsf([...corr(1, 170), ...corr(2, 170), ...corr(3, 170)], blocks, profile);
+    const weak = analyzeIsf([...corr(1, 170), ...corr(2, 170), ...corr(3, 170)], blocks, profile, new Date(2026, 8, 5).getTime());
     expect(weak[0].observed).toBeCloseTo(20);
     expect(weak[0].suggested).toBe(32);
   });
@@ -1124,7 +1124,7 @@ describe('sürekli oran analizi (optimizer)', () => {
   it('uygulanabilir öneri varsa ana sayfa uyarısı verir', () => {
     expect(attention(ev(days([1, 2, 3], 190)), { blocks: [block] }, NOWO)).toContain('Karbonhidrat');
     expect(attention(ev(days([1, 2, 3], 110)), { blocks: [block] }, NOWO)).toBeUndefined();
-    expect(blockSuggestions(ev(days([1, 2, 3], 190)).icr, [block], 'icr')[0].suggested).toBe(8);
+    expect(blockSuggestions(ev(days([1, 2, 3], 190)).icr, [block], 'icr', NOWO)[0].suggested).toBe(8);
   });
 
   const night = (daysAgo: number, evening: number, morning: number, extra: LogEntry[] = []): LogEntry[] => {
@@ -1181,7 +1181,7 @@ describe('öneriler güncel kayıtlara göre (eski kayıtlar etkilemez)', () => 
     expect(all.icr).toHaveLength(8);
     const rec = recentEval(all, NOWR);
     expect(rec.icr).toHaveLength(3);
-    expect(blockSuggestions(rec.icr, [block], 'icr')[0].suggested).toBe(8);
+    expect(blockSuggestions(rec.icr, [block], 'icr', NOWR)[0].suggested).toBe(8);
     expect(attention(all, { blocks: [block] }, NOWR)).toContain('Karbonhidrat');
     // yalnızca eski kayıtlar varsa güncel öneri yok
     const onlyOld = evaluate(old, { blocks: [block], dia: 4, peak: 75, mealStarts: settings.mealStarts }, NOWR);
@@ -1257,6 +1257,46 @@ describe('porsiyon birimleri ve veri tabani (TURKOMP / TUBER)', () => {
   it('terazi ile ozel gram girildiginde net hesaplar', () => {
     const elma = d.FOODS.find((f: any) => f.name === 'Elma')!;
     expect(d.carbsFor(elma, 150, 'composition')).toBeCloseTo(18);
+  });
+
+  it('ayni ad ve kimlikle iki besin kaydi yok', () => {
+    const names = d.FOODS.map((f: any) => d.normalize(f.name));
+    expect(new Set(names).size).toBe(names.length);
+    const ids = d.FOODS.map((f: any) => f.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('sakatat ve balik kayitlari degisim yonteminde dogru karbonhidrat veriyor', () => {
+    const ciger = d.FOODS.find((f: any) => f.name === 'Ciğer (dana, pişmiş)')!;
+    expect(ciger).toBeDefined();
+    expect(ciger.carbsPer100).toBe(5);
+    expect(ciger.exPer100).toBeCloseTo(6.67, 1);
+    expect(d.carbsFor(ciger, 150, 'composition')).toBeCloseTo(7.5);
+
+    const kuzuCiger = d.FOODS.find((f: any) => f.name === 'Ciğer (kuzu, pişmiş)')!;
+    expect(kuzuCiger.carbsPer100).toBe(2.5);
+
+    const balik = d.FOODS.find((f: any) => f.name === 'Levrek (ızgara / fırın)')!;
+    expect(balik.carbsPer100).toBe(0);
+
+    // USDA SR Legacy, pisirilmis 100 g
+    const beklenen: Record<string, number> = {
+      'Tavuk ciğeri (sote)': 1,
+      'Dil (dana / kuzu, haşlanmış)': 0,
+      'Böbrek (sote)': 0,
+      'Yürek (dana / kuzu)': 0,
+      'İşkembe (haşlanmış)': 2,
+      'Beyin (haşlanmış)': 1.5,
+    };
+    for (const [name, carb] of Object.entries(beklenen)) {
+      const food = d.FOODS.find((f: any) => f.name === name);
+      expect(food).toBeDefined();
+      expect(food!.carbsPer100).toBe(carb);
+    }
+  });
+
+  it('kategoriler sabit listeyle ayni', () => {
+    for (const food of d.FOODS) expect(d.CATEGORIES).toContain(food.category);
   });
 });
 
